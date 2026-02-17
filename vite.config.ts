@@ -3,7 +3,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  base: process.env.VITE_BASE_PATH ?? '/',
+  // Relative base keeps assets and SW paths valid in subpath hosting (e.g. GitHub Pages project sites).
+  base: process.env.VITE_BASE_PATH ?? './',
   build: {
     sourcemap: true,
     assetsDir: "code",
