@@ -1,13 +1,25 @@
 import { LitElement, css, html } from 'lit';
-import { customElement } from 'lit/decorators.js';
+import { customElement, state } from 'lit/decorators.js';
 import { resolveRouterPath } from '../router';
+import {
+  clampDiceCount,
+  DEFAULT_DICE_TYPE,
+  DICE_TYPES,
+  getDiceType,
+  type DiceTypeConfig,
+} from '../dice-config';
 
 import '@shoelace-style/shoelace/dist/components/card/card.js';
+import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '../components/dice-webgl-icon';
 
 import { styles } from '../styles/shared-styles';
 
 @customElement('app-home')
 export class AppHome extends LitElement {
+  @state() private selectedDiceType = getDiceType(DEFAULT_DICE_TYPE);
+  @state() private diceCount = 1;
+
   static styles = [
     styles,
     css`
@@ -25,233 +37,307 @@ export class AppHome extends LitElement {
         border-radius: 0;
       }
 
-      h2 {
-        margin: 0;
-      }
-
-      #buttons {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 14px;
-        margin-top: 20px;
-      }
-
-      .choiceTile {
-        box-sizing: border-box;
-        border: 2px solid color-mix(in oklab, var(--app-color-primary) 62%, #8aa0b8);
-        border-radius: 14px;
-        background: linear-gradient(
-          155deg,
-          color-mix(in oklab, var(--app-color-primary) 18%, #ffffff) 0%,
-          #ffffff 48%,
-          color-mix(in oklab, var(--app-color-primary) 8%, #eef3fa) 100%
-        );
-        color: inherit;
-        text-decoration: none;
-        min-height: 138px;
-        padding: 14px;
+      #selectCard::part(body) {
         display: flex;
         flex-direction: column;
-        justify-content: center;
-        align-items: center;
         gap: 10px;
+        box-sizing: border-box;
+        height: 100%;
+        padding: 12px;
+        overflow: auto;
+      }
+
+      h2 {
+        margin: 0;
+        font-size: 22px;
+        line-height: 1.05;
+      }
+
+      #typeGrid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 7px;
+      }
+
+      .typeTile {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 118px;
+        padding: 8px 6px 7px;
+        border: 1.5px solid color-mix(in oklab, var(--app-color-primary) 42%, #90a3b6);
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at 26% 18%, rgba(255, 255, 255, 0.9), transparent 38%),
+          linear-gradient(
+            165deg,
+            color-mix(in oklab, var(--app-color-primary) 14%, #fcfdff) 0%,
+            #ffffff 44%,
+            color-mix(in oklab, var(--app-color-primary) 8%, #edf3fb) 100%
+          );
+        color: inherit;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        align-items: center;
+        gap: 4px;
         box-shadow:
-          0 10px 18px rgba(0, 0, 0, 0.14),
-          0 0 0 1px rgba(255, 255, 255, 0.7) inset;
+          0 8px 16px rgba(15, 23, 42, 0.12),
+          0 0 0 1px rgba(255, 255, 255, 0.72) inset;
         transition:
           transform 120ms ease,
           box-shadow 120ms ease,
           border-color 120ms ease,
           background 120ms ease;
+        cursor: pointer;
+        appearance: none;
+        -webkit-tap-highlight-color: transparent;
       }
 
-      .choiceTile:hover {
-        transform: translateY(-2px);
+      .typeTile:hover {
+        transform: translateY(-1px);
         box-shadow:
-          0 14px 24px rgba(0, 0, 0, 0.18),
-          0 0 0 3px color-mix(in oklab, var(--app-color-primary) 22%, transparent);
+          0 12px 22px rgba(15, 23, 42, 0.16),
+          0 0 0 3px color-mix(in oklab, var(--app-color-primary) 18%, transparent);
         border-color: var(--app-color-primary);
       }
 
-      .dicePreview {
+      .typeTile.selected {
+        border-color: color-mix(in oklab, var(--app-color-primary) 82%, #87a3c2);
+        background:
+          radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.95), transparent 40%),
+          linear-gradient(
+            165deg,
+            color-mix(in oklab, var(--app-color-primary) 20%, #ffffff) 0%,
+            #ffffff 42%,
+            color-mix(in oklab, var(--app-color-primary) 15%, #e6effa) 100%
+          );
+        box-shadow:
+          0 14px 24px rgba(15, 23, 42, 0.16),
+          0 0 0 3px color-mix(in oklab, var(--app-color-primary) 20%, transparent);
+        transform: translateY(-1px);
+      }
+
+      .diePreview {
+        width: 100%;
+        max-width: 62px;
+        aspect-ratio: 1 / 1;
+        margin-top: 2px;
+      }
+
+      dice-webgl-icon {
+        width: 100%;
+        height: 100%;
+      }
+
+      .typeMeta {
+        width: 100%;
+        display: grid;
+        justify-items: center;
+        gap: 2px;
+        text-align: center;
+      }
+
+      .typeId {
+        padding: 2px 7px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+        font-size: 12px;
+        line-height: 1;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+      }
+
+      .typeName {
+        min-height: 20px;
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 8px;
-        min-height: 54px;
-      }
-
-      .miniDie {
-        width: 34px;
-        height: 34px;
-        border-radius: 9px;
-        border: 2px solid #a7b3c3;
-        background: linear-gradient(145deg, #ffffff 0%, #f2f4f8 100%);
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        grid-template-rows: repeat(3, 1fr);
-        place-items: center;
-        box-shadow:
-          0 3px 10px rgba(0, 0, 0, 0.12),
-          inset 0 1px 0 rgba(255, 255, 255, 0.9);
-      }
-
-      .miniPip {
-        width: 5px;
-        height: 5px;
-        border-radius: 50%;
-        background: #1f2937;
-      }
-
-      .count-2 .miniDie:nth-child(2) {
-        transform: translateY(-5px);
-      }
-
-      .count-3 .miniDie:nth-child(2) {
-        transform: translateY(-6px);
-      }
-
-      .count-3 .miniDie:nth-child(3) {
-        transform: translateY(3px);
-      }
-
-      .choiceLabel {
+        font-size: 10px;
+        line-height: 1.05;
         font-weight: 700;
+        text-wrap: balance;
+      }
+
+      .typeTeaser {
+        font-size: 9px;
+        color: #607283;
       }
 
       .hintText {
-        margin-top: 10px;
+        margin: 4px 0 0;
+        color: #546678;
+        font-size: 13px;
       }
 
-      .srOnly {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border: 0;
+      #countCard {
+        padding: 10px 12px 12px;
+        border-radius: 16px;
+        background: color-mix(in oklab, var(--app-color-primary) 8%, white);
+        box-shadow: inset 0 0 0 1px rgba(138, 160, 184, 0.24);
       }
 
-      .miniDie .miniPip:nth-child(1),
-      .miniDie .miniPip:nth-child(2),
-      .miniDie .miniPip:nth-child(3),
-      .miniDie .miniPip:nth-child(4),
-      .miniDie .miniPip:nth-child(6),
-      .miniDie .miniPip:nth-child(7),
-      .miniDie .miniPip:nth-child(8),
-      .miniDie .miniPip:nth-child(9) {
-        opacity: 0;
+      .countHeader {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 14px;
+        font-weight: 700;
       }
 
-      .miniDie .miniPip:nth-child(5) {
-        opacity: 1;
+      .countValue {
+        min-width: 38px;
+        padding: 3px 8px;
+        border-radius: 999px;
+        background: white;
+        text-align: center;
+        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
       }
 
-      .choiceTile:focus-visible {
+      #countRange {
+        width: 100%;
+        margin: 10px 0 6px;
+        accent-color: var(--app-color-primary);
+      }
+
+      .rangeMarks {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        color: #617384;
+        font-size: 12px;
+        text-align: center;
+      }
+
+      #actionRow {
+        margin-top: auto;
+        display: grid;
+        gap: 8px;
+      }
+
+      .selectionSummary {
+        margin: 0;
+        color: #516274;
+        font-size: 13px;
+      }
+
+      .typeTile:focus-visible {
         outline: 3px solid color-mix(in oklab, var(--app-color-primary) 50%, white);
         outline-offset: 2px;
       }
 
-      @media (max-width: 620px) {
-        #buttons {
-          grid-template-columns: 1fr;
+      @media (min-width: 760px) {
+        #typeGrid {
+          grid-template-columns: repeat(6, minmax(0, 1fr));
         }
 
-        .choiceTile {
-          min-height: 112px;
+        .typeTile {
+          min-height: 132px;
+        }
+
+        .diePreview {
+          max-width: 76px;
         }
       }
 
-      .choiceTile:active {
+      @media (max-width: 420px) {
+        #selectCard::part(body) {
+          gap: 10px;
+          padding: 12px;
+        }
+
+        h2 {
+          font-size: 20px;
+        }
+
+        .typeTile {
+          min-height: 104px;
+          padding: 7px 5px 6px;
+          border-radius: 16px;
+        }
+
+        .diePreview {
+          max-width: 56px;
+        }
+
+        .typeName {
+          min-height: 18px;
+          font-size: 9px;
+        }
+
+        .typeTeaser {
+          display: none;
+        }
+
+        #countCard {
+          padding: 10px 12px 12px;
+        }
+      }
+
+      .typeTile:active {
         transform: translateY(0) scale(0.99);
       }
 
-      a {
-        -webkit-tap-highlight-color: transparent;
-      }
-
-      .choiceTile,
-      .choiceTile * {
+      .typeTile,
+      .typeTile * {
         user-select: none;
-      }
-
-      .choiceContent {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 6px;
-      }
-
-      .choiceIconLabel {
-        display: inline-flex;
-        align-items: center;
-      }
-
-      .choiceIconLabel .countText {
-        margin-left: 6px;
-      }
-
-      .choiceLabelWrap {
-        display: flex;
-        align-items: baseline;
-        gap: 4px;
-      }
-
-      .choiceLabelWrap .num {
-        font-size: 20px;
-        line-height: 1;
-      }
-
-      .choiceLabelWrap .word {
-        font-size: 14px;
-      }
-
-      .choiceTile .choiceLabelWrap {
-        text-shadow: 0 1px 0 rgba(255, 255, 255, 0.7);
-      }
-
-      .choiceTile {
-        width: 100%;
       }
     `,
   ];
 
-  private getRollPath(cubesCount: number): string {
+  firstUpdated() {
+    const params = new URLSearchParams(window.location.search);
+    this.selectedDiceType = getDiceType(params.get('type'));
+    this.diceCount = clampDiceCount(Number(params.get('count')));
+  }
+
+  private getRollPath(): string {
     const rollUrl = new URL(resolveRouterPath('roll'), window.location.origin);
-    rollUrl.searchParams.set('count', String(cubesCount));
+    rollUrl.searchParams.set('count', String(this.diceCount));
+    rollUrl.searchParams.set('type', this.selectedDiceType.id);
     return `${rollUrl.pathname}${rollUrl.search}`;
   }
 
-  private renderDiceIcons(count: number) {
-    return html`
-      <div class="dicePreview count-${count}" aria-hidden="true">
-        ${Array.from({ length: count }).map(
-          () => html`
-            <div class="miniDie">
-              ${Array.from({ length: 9 }).map(() => html`<span class="miniPip"></span>`)}
-            </div>
-          `
-        )}
-      </div>
-    `;
+  private getCountWord(count: number): string {
+    if (count === 1) {
+      return 'кубик';
+    }
+
+    if (count < 5) {
+      return 'кубика';
+    }
+
+    return 'кубиков';
   }
 
-  private renderChoice(count: number) {
-    const cubeWord = count === 1 ? 'кубик' : count < 5 ? 'кубика' : 'кубиков';
+  private updateDiceCount(event: Event) {
+    const input = event.target as HTMLInputElement;
+    this.diceCount = clampDiceCount(Number(input.value));
+  }
+
+  private selectDiceType(diceType: DiceTypeConfig) {
+    this.selectedDiceType = diceType;
+  }
+
+  private renderChoice(diceType: DiceTypeConfig) {
+    const isSelected = this.selectedDiceType.id === diceType.id;
 
     return html`
-      <a class="choiceTile" href="${this.getRollPath(count)}">
-        ${this.renderDiceIcons(count)}
-        <div class="choiceContent">
-          <div class="choiceLabelWrap">
-            <span class="num">${count}</span>
-            <span class="word">${cubeWord}</span>
-          </div>
+      <button
+        type="button"
+        class="typeTile ${isSelected ? 'selected' : ''}"
+        @click=${() => this.selectDiceType(diceType)}
+        aria-pressed="${isSelected ? 'true' : 'false'}"
+      >
+        <div class="diePreview">
+          <dice-webgl-icon dice-type="${diceType.id}"></dice-webgl-icon>
         </div>
-      </a>
+        <div class="typeMeta">
+          <span class="typeId">${diceType.id.toUpperCase()}</span>
+          <span class="typeName">${diceType.solidName}</span>
+          <span class="typeTeaser">${diceType.teaser}</span>
+        </div>
+      </button>
     `;
   }
 
@@ -262,11 +348,43 @@ export class AppHome extends LitElement {
       <main>
         <div id="screen">
           <sl-card id="selectCard">
-            <h2>Сколько кубиков бросаем?</h2>
-            <p class="hintText">Выберите количество: 1, 2 или 3.</p>
+            <div>
+              <h2>Выберите тип кубиков</h2>
+              <p class="hintText">Нажмите на иконку кубика, затем укажите количество от 1 до 6.</p>
+            </div>
 
-            <div id="buttons">
-              ${this.renderChoice(1)} ${this.renderChoice(2)} ${this.renderChoice(3)}
+            <div id="typeGrid">${DICE_TYPES.map((diceType) => this.renderChoice(diceType))}</div>
+
+            <section id="countCard">
+              <div class="countHeader">
+                <span>Количество кубиков</span>
+                <span class="countValue">${this.diceCount}</span>
+              </div>
+
+              <input
+                id="countRange"
+                type="range"
+                min="1"
+                max="6"
+                step="1"
+                .value=${String(this.diceCount)}
+                @input=${this.updateDiceCount}
+                aria-label="Количество кубиков"
+              />
+
+              <div class="rangeMarks" aria-hidden="true">
+                ${Array.from({ length: 6 }, (_, index) => html`<span>${index + 1}</span>`)}
+              </div>
+            </section>
+
+            <div id="actionRow">
+              <p class="selectionSummary">
+                Выбрано: ${this.diceCount} ${this.getCountWord(this.diceCount)}
+                ${this.selectedDiceType.id.toUpperCase()} (${this.selectedDiceType.solidName.toLowerCase()}).
+              </p>
+              <sl-button href="${this.getRollPath()}" variant="primary" size="large">
+                Перейти к броску
+              </sl-button>
             </div>
           </sl-card>
         </div>

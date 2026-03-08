@@ -1,9 +1,11 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
 import { resolveRouterPath } from '../router';
+import { clampDiceCount, DEFAULT_DICE_TYPE, getDiceType } from '../dice-config';
 
 import '@shoelace-style/shoelace/dist/components/card/card.js';
 import '@shoelace-style/shoelace/dist/components/button/button.js';
+import '../components/dice-webgl-icon';
 
 import { styles } from '../styles/shared-styles';
 
@@ -12,9 +14,11 @@ type RollState = 'idle' | 'rolling' | 'result';
 @customElement('app-roll')
 export class AppRoll extends LitElement {
   @state() private diceCount = 1;
+  @state() private diceType = getDiceType(DEFAULT_DICE_TYPE);
   @state() private rollState: RollState = 'idle';
   @state() private currentValues: number[] = [1];
 
+  private readonly rollDurationMs = 3000;
   private rollIntervalId?: number;
   private rollTimeoutId?: number;
 
@@ -40,73 +44,81 @@ export class AppRoll extends LitElement {
         flex-direction: column;
         box-sizing: border-box;
         height: 100%;
-        padding: 20px;
+        padding: 16px;
       }
 
       h2 {
         margin: 0;
       }
 
-      #hint {
-        margin: 8px 0 12px;
+      #summaryRow {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 10px;
+      }
+
+      .summaryChip {
+        padding: 7px 12px;
+        border-radius: 999px;
+        background: color-mix(in oklab, var(--app-color-primary) 10%, white);
+        color: #223243;
+        font-size: 14px;
+        box-shadow: inset 0 0 0 1px rgba(138, 160, 184, 0.24);
       }
 
       #diceRow {
         flex: 1;
         display: flex;
         justify-content: center;
-        align-items: center;
+        align-items: flex-start;
         flex-wrap: wrap;
-        column-gap: 26px;
-        row-gap: 18px;
+        column-gap: 18px;
+        row-gap: 10px;
         margin: 0;
-        padding: 12px 14px;
+        padding: 10px 8px;
       }
 
-      .die {
-        border: 2px solid color-mix(in oklab, var(--app-color-primary) 45%, #9aa4b2);
-        border-radius: 16px;
-        width: min(96px, 100%);
-        aspect-ratio: 1 / 1;
-        justify-self: center;
+      .dieCard {
+        width: min(112px, 100%);
         display: flex;
-        justify-content: center;
         align-items: center;
-        background: linear-gradient(145deg, #ffffff 0%, #f2f4f8 100%);
+        flex-direction: column;
+        gap: 8px;
+        transition: transform 220ms ease;
+      }
+
+      .dieCard.rolling {
+        animation: bounce 420ms ease-in-out infinite alternate;
+      }
+
+      .diePreview {
+        width: 100%;
+        max-width: 62px;
+        aspect-ratio: 1 / 1;
+      }
+
+      dice-webgl-icon {
+        width: 100%;
+        height: 100%;
+      }
+
+      .dieValueChip {
+        min-width: 58px;
+        padding: 5px 10px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.96);
         box-shadow:
-          0 8px 20px rgba(0, 0, 0, 0.12),
-          inset 0 1px 0 rgba(255, 255, 255, 0.9);
-      }
-
-      .face {
-        width: 78%;
-        height: 78%;
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        grid-template-rows: repeat(3, 1fr);
-        place-items: center;
-      }
-
-      .pip {
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #1f2937;
-        opacity: 0;
-        transform: scale(0.85);
-      }
-
-      .pip.visible {
-        opacity: 1;
-        transform: scale(1);
-      }
-
-      .rolling {
-        animation: wobble 380ms linear infinite;
+          0 6px 14px rgba(15, 23, 42, 0.1),
+          inset 0 0 0 1px rgba(138, 160, 184, 0.18);
+        font-size: 12px;
+        font-weight: 800;
+        text-align: center;
+        color: #243445;
       }
 
       #actionRow {
-        padding-top: 16px;
+        padding-top: 12px;
         display: grid;
         gap: 10px;
       }
@@ -115,28 +127,35 @@ export class AppRoll extends LitElement {
         width: 100%;
       }
 
-      @keyframes wobble {
+      @keyframes bounce {
         0% {
-          transform: translateY(0) rotate(0deg) scale(1);
-        }
-        25% {
-          transform: translateY(-4px) rotate(-8deg) scale(1.03);
-        }
-        50% {
-          transform: translateY(0) rotate(0deg) scale(1);
-        }
-        75% {
-          transform: translateY(-3px) rotate(8deg) scale(1.02);
+          transform: translateY(0);
         }
         100% {
-          transform: translateY(0) rotate(0deg) scale(1);
+          transform: translateY(-5px);
+        }
+      }
+
+      @media (min-width: 760px) {
+        .dieCard {
+          width: min(124px, 100%);
+        }
+
+        .diePreview {
+          max-width: 76px;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .dieCard.rolling {
+          animation: none;
         }
       }
     `,
   ];
 
   firstUpdated() {
-    this.diceCount = this.getDiceCountFromQuery();
+    this.readSelectionFromQuery();
     this.currentValues = this.createRandomRoll(this.diceCount);
   }
 
@@ -145,52 +164,49 @@ export class AppRoll extends LitElement {
     this.clearRollTimers();
   }
 
-  private getDiceCountFromQuery(): number {
+  private readSelectionFromQuery() {
     const params = new URLSearchParams(window.location.search);
-    const rawCount = Number(params.get('count'));
+    this.diceType = getDiceType(params.get('type'));
+    this.diceCount = clampDiceCount(Number(params.get('count')));
+  }
 
-    if (!Number.isInteger(rawCount)) {
-      return 1;
-    }
+  private getSelectionPath(): string {
+    const selectionUrl = new URL(resolveRouterPath(), window.location.origin);
+    selectionUrl.searchParams.set('count', String(this.diceCount));
+    selectionUrl.searchParams.set('type', this.diceType.id);
+    return `${selectionUrl.pathname}${selectionUrl.search}`;
+  }
 
-    return Math.min(3, Math.max(1, rawCount));
+  private createRandomValue(): number {
+    return Math.floor(Math.random() * this.diceType.sides) + 1;
   }
 
   private createRandomRoll(count: number): number[] {
-    return Array.from({ length: count }, () => Math.floor(Math.random() * 6) + 1);
+    return Array.from({ length: count }, () => this.createRandomValue());
   }
 
-  private getVisiblePips(value: number): number[] {
-    switch (value) {
-      case 1:
-        return [5];
-      case 2:
-        return [1, 9];
-      case 3:
-        return [1, 5, 9];
-      case 4:
-        return [1, 3, 7, 9];
-      case 5:
-        return [1, 3, 5, 7, 9];
-      case 6:
-        return [1, 3, 4, 6, 7, 9];
-      default:
-        return [5];
-    }
+  private getTotalValue(): number {
+    return this.currentValues.reduce((sum, value) => sum + value, 0);
   }
 
-  private renderDie(value: number) {
-    const visiblePips = this.getVisiblePips(value);
+  private getMotionMode(): 'rolling' | 'still' {
+    return this.rollState === 'rolling' ? 'rolling' : 'still';
+  }
+
+  private renderDie(value: number, index: number) {
+    const isRolling = this.rollState === 'rolling';
 
     return html`
-      <div class="die ${this.rollState === 'rolling' ? 'rolling' : ''}">
-        <div class="face" role="img" aria-label="Кубик: ${value}">
-          ${Array.from({ length: 9 }, (_, index) => index + 1).map(
-            (position) => html`
-              <span class="pip ${visiblePips.includes(position) ? 'visible' : ''}"></span>
-            `
-          )}
+      <div class="dieCard ${isRolling ? 'rolling' : ''}" role="img" aria-label="${this.diceType.id.toUpperCase()}: ${value}">
+        <div class="diePreview">
+          <dice-webgl-icon
+            dice-type="${this.diceType.id}"
+            motion-mode="${this.getMotionMode()}"
+            roll-duration-ms="${this.rollDurationMs}"
+            face-value="${value}"
+          ></dice-webgl-icon>
         </div>
+        <div class="dieValueChip">#${index + 1}: ${value}</div>
       </div>
     `;
   }
@@ -224,7 +240,7 @@ export class AppRoll extends LitElement {
       this.clearRollTimers();
       this.currentValues = this.createRandomRoll(this.diceCount);
       this.rollState = 'result';
-    }, 3000);
+    }, this.rollDurationMs);
   }
 
   render() {
@@ -234,16 +250,16 @@ export class AppRoll extends LitElement {
       <main>
         <div id="screen">
           <sl-card id="rollCard">
-            <h2>Кубиков: ${this.diceCount}</h2>
+            <h2>${this.diceType.id.toUpperCase()} · ${this.diceType.solidName}</h2>
 
-            <p id="hint">
-              ${this.rollState === 'rolling'
-                ? 'Бросаю...'
-                : 'Нажмите "Бросаю", чтобы получить новый результат.'}
-            </p>
+            <div id="summaryRow">
+              <span class="summaryChip">Кубиков: ${this.diceCount}</span>
+              <span class="summaryChip">Граней: ${this.diceType.sides}</span>
+              <span class="summaryChip">Сумма: ${this.getTotalValue()}</span>
+            </div>
 
             <div id="diceRow">
-              ${this.currentValues.map((value) => this.renderDie(value))}
+              ${this.currentValues.map((value, index) => this.renderDie(value, index))}
             </div>
 
             <div id="actionRow">
@@ -255,7 +271,7 @@ export class AppRoll extends LitElement {
               >
                 Бросаю
               </sl-button>
-              <sl-button href="${resolveRouterPath()}" variant="default" size="large">
+              <sl-button href="${this.getSelectionPath()}" variant="default" size="large">
                 К выбору кубиков
               </sl-button>
             </div>
