@@ -14,14 +14,14 @@ export class AppHeader extends LitElement {
       align-items: center;
       background: var(--app-color-primary);
       color: white;
-      padding: 12px;
-      padding-top: 4px;
+      box-sizing: border-box;
+      min-height: var(--app-header-height);
+      padding: var(--app-safe-area-top) 12px 0;
 
       position: fixed;
-      left: env(titlebar-area-x, 0);
-      top: env(titlebar-area-y, 0);
-      height: env(titlebar-area-height, 30px);
-      width: env(titlebar-area-width, 100%);
+      left: 0;
+      top: 0;
+      width: 100%;
       -webkit-app-region: drag;
     }
 

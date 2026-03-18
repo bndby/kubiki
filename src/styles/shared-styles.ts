@@ -22,5 +22,8 @@ export const styles = css`
     height: 100dvh;
     padding: 0;
     padding-top: var(--app-header-height);
+    padding-right: var(--app-safe-area-right);
+    padding-bottom: var(--app-safe-area-bottom);
+    padding-left: var(--app-safe-area-left);
   }
 `;

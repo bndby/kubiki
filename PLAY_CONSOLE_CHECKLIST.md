@@ -82,6 +82,8 @@
 - [ ] AAB сгенерирован через PWABuilder (Android/TWA)
 - [ ] Package ID в PWABuilder: `by.bnd.pwakubiki`
 - [ ] После публикации обновлен SHA-256 в `assetlinks.json`
+- [ ] Для Android 15+ проверен edge-to-edge (контент не перекрывается системными барами)
+- [ ] В Android-обёртке из PWABuilder добавлен `enableEdgeToEdge()` (Kotlin) или `EdgeToEdge.enable(this)` (Java)
 
 ## 7) Минимальный пакет файлов, который нужно держать под рукой
 

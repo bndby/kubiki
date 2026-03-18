@@ -28,13 +28,13 @@ export class AppRoll extends LitElement {
       #screen {
         display: flex;
         width: 100%;
-        height: calc(100dvh - var(--app-header-height));
+        height: var(--app-content-height);
       }
 
       #rollCard {
         box-sizing: border-box;
         width: 100%;
-        height: calc(100dvh - var(--app-header-height));
+        height: var(--app-content-height);
         padding: 20px;
         border-radius: 0;
       }

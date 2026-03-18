@@ -5,7 +5,13 @@
 */
 :root {
   --font-family: sans-serif;
-  --app-header-height: 34px;
+  --app-safe-area-top: env(safe-area-inset-top, 0px);
+  --app-safe-area-right: env(safe-area-inset-right, 0px);
+  --app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+  --app-safe-area-left: env(safe-area-inset-left, 0px);
+  --app-header-base-height: 34px;
+  --app-header-height: calc(var(--app-header-base-height) + var(--app-safe-area-top));
+  --app-content-height: calc(100dvh - var(--app-header-height) - var(--app-safe-area-bottom));
 }
 
 html, body {

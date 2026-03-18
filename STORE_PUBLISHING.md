@@ -28,6 +28,20 @@
 4. Загрузить `.aab` в Google Play Console.
 5. После первой публикации обновить `assetlinks.json` SHA-256 отпечатком из Play Console, чтобы TWA работал корректно без адресной строки.
 
+### Android 15+ edge-to-edge (SDK 35)
+
+Начиная с Android 15, edge-to-edge включается по умолчанию для приложений с `targetSdkVersion 35`, поэтому нужны два слоя совместимости:
+
+1. **Web-слой (этот репозиторий):**
+   - в `index.html` должен быть `viewport-fit=cover`;
+   - в CSS должны использоваться `env(safe-area-inset-*)` для верхнего/нижнего/боковых отступов.
+
+2. **Нативная обёртка (проект, сгенерированный PWABuilder):**
+   - в `MainActivity`/launcher activity включить edge-to-edge:
+     - Kotlin: `enableEdgeToEdge()`
+     - Java: `EdgeToEdge.enable(this)`
+   - после этого проверить, что контент не уходит под статус-бар и navigation bar на Android 15+ устройствах.
+
 ## iOS (App Store) через PWABuilder
 
 1. В PWABuilder выбрать упаковку для iOS и скачать Xcode-проект.
