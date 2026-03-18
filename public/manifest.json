@@ -1,5 +1,6 @@
 {
   "id": "by.bnd.kubiki",
+  "iarc_rating_id": "e9002293-58c8-82b2-83a0-3ef410f50e30",
   "scope": "./",
   "lang": "ru-RU",
   "name": "PWA Kubiki",
@@ -14,6 +15,12 @@
   "display_override": [
     "standalone"
   ],
+  "launch_handler": {
+    "client_mode": [
+      "navigate-existing",
+      "auto"
+    ]
+  },
   "icons": [
     {
       "src": "assets/icons/48x48.png",
@@ -60,6 +67,42 @@
       "form_factor": "narrow"
     }
   ],
+  "shortcuts": [
+    {
+      "name": "Выбрать кубики",
+      "short_name": "Кубики",
+      "description": "Открыть выбор кубиков",
+      "url": "./",
+      "icons": [
+        {
+          "src": "assets/icons/192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    },
+    {
+      "name": "Бросить кубики",
+      "short_name": "Бросок",
+      "description": "Сразу перейти к броску",
+      "url": "./roll",
+      "icons": [
+        {
+          "src": "assets/icons/192x192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "by.bnd.kubiki",
+      "url": "https://play.google.com/store/apps/details?id=by.bnd.kubiki"
+    }
+  ],
+  "prefer_related_applications": true,
   "categories": [
     "games",
     "entertainment"
