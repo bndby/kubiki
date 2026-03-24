@@ -1,0 +1,1938 @@
+diff --git a/src/app-index.ts b/src/app-index.ts
+index 53c2928..0fc3866 100644
+--- a/src/app-index.ts
++++ b/src/app-index.ts
+@@ -1,34 +1,25 @@
+-import { LitElement, css } from 'lit';
++import { LitElement } from 'lit';
+ import { customElement } from 'lit/decorators.js';
+ 
+-import './pages/app-home';
+ import './components/header';
++import './components/app-tabs';
+ import './styles/global.css';
+ import { router } from './router';
+ 
+ @customElement('app-index')
+ export class AppIndex extends LitElement {
+-  static styles = css`
+-    main {
+-      padding-left: 16px;
+-      padding-right: 16px;
+-      padding-bottom: 16px;
+-    }
+-  `;
+-
+   firstUpdated() {
+     router.addEventListener('route-changed', () => {
+-      if ("startViewTransition" in document) {
++      if ('startViewTransition' in document) {
+         (document as any).startViewTransition(() => this.requestUpdate());
+-      }
+-      else {
++      } else {
+         this.requestUpdate();
+       }
+     });
+   }
+ 
+   render() {
+-    // router config can be round in src/router.ts
++    // Конфигурация маршрутов — в src/router.ts
+     return router.render();
+   }
+ }
+diff --git a/src/components/dice-webgl-icon.ts b/src/components/dice-webgl-icon.ts
+index d3816fd..82c3d5b 100644
+--- a/src/components/dice-webgl-icon.ts
++++ b/src/components/dice-webgl-icon.ts
+@@ -18,12 +18,16 @@ type FaceAccumulator = {
+   vertices: Map<string, THREE.Vector3>;
+ };
+ 
++type LabelStyle = 'pips' | 'number';
++
+ @customElement('dice-webgl-icon')
+ export class DiceWebglIcon extends LitElement {
+   @property({ type: String, attribute: 'dice-type' }) diceTypeId: DiceTypeId = DEFAULT_DICE_TYPE;
+   @property({ type: String, attribute: 'motion-mode' }) motionMode: MotionMode = 'preview';
+   @property({ type: Number, attribute: 'roll-duration-ms' }) rollDurationMs = 3000;
+   @property({ type: Number, attribute: 'face-value' }) faceValue = 1;
++  /** Цвет кубика в hex-формате, берётся из diceType.color */
++  @property({ type: String, attribute: 'dice-color' }) diceColor = '#d94040';
+ 
+   @state() private hasWebglError = false;
+ 
+@@ -97,6 +101,11 @@ export class DiceWebglIcon extends LitElement {
+       this.rebuildDie();
+     }
+ 
++    // При смене цвета — перестраиваем кубик целиком (меняется материал)
++    if (changedProperties.has('diceColor') && this.scene) {
++      this.rebuildDie();
++    }
++
+     if (
+       this.scene &&
+       (changedProperties.has('motionMode') ||
+@@ -138,15 +147,16 @@ export class DiceWebglIcon extends LitElement {
+     this.scene = new THREE.Scene();
+ 
+     this.camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
+-    this.camera.position.set(0, 0.18, 4.2);
++    this.camera.position.set(0.7, 3.9, 2.2);
++    this.camera.lookAt(0, 0, 0);
+ 
+-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.6);
+-    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xc6d3e3, 1.4);
++    const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
++    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x1a1a2a, 1.8);
+     hemisphereLight.position.set(0, 2, 0);
+-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.7);
+-    keyLight.position.set(2.6, 3.2, 4.6);
+-    const fillLight = new THREE.DirectionalLight(0xa5c4ff, 0.65);
+-    fillLight.position.set(-3.2, -1.4, 2.2);
++    const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
++    keyLight.position.set(0.3, 6.0, 1.0);
++    const fillLight = new THREE.DirectionalLight(0x6688aa, 0.2);
++    fillLight.position.set(-3.0, -1.0, 2.0);
+ 
+     this.scene.add(ambientLight, hemisphereLight, keyLight, fillLight);
+ 
+@@ -261,39 +271,42 @@ export class DiceWebglIcon extends LitElement {
+     this.renderer.render(this.scene, this.camera);
+   };
+ 
++  /**
++   * Создаёт группу Three.js для кубика выбранного типа и цвета.
++   * @returns Готовая группа объектов сцены
++   */
+   private createDieGroup(): THREE.Group {
+     const diceType = getDiceType(this.diceTypeId);
+-    const { geometry, faces } = this.buildGeometryForDice(diceType.id);
++    const { geometry, edgesGeometry, faces, labelStyle } = this.buildGeometryForDice(diceType.id);
+     const group = new THREE.Group();
+     this.faceDescriptors = faces.slice(0, diceType.sides);
+ 
++    const bodyColor = new THREE.Color(this.diceColor);
+     const shellMaterial = new THREE.MeshPhysicalMaterial({
+-      color: 0xf9fbff,
+-      metalness: 0.04,
+-      roughness: 0.26,
+-      clearcoat: 0.7,
+-      clearcoatRoughness: 0.32,
+-      sheen: 0.35,
+-      sheenColor: 0xeaf1ff,
+-      transparent: true,
+-      opacity: 0.98,
++      color: bodyColor,
++      metalness: 0.02,
++      roughness: 0.24,
++      clearcoat: 0.45,
++      clearcoatRoughness: 0.35,
++      sheen: 0.25,
++      sheenColor: bodyColor.clone().lerp(new THREE.Color(0xffffff), 0.32),
++      opacity: 1,
+     });
+ 
+     const shell = new THREE.Mesh(geometry, shellMaterial);
+     group.add(shell);
+ 
+-    const edges = new THREE.LineSegments(
+-      new THREE.EdgesGeometry(geometry, 8),
+-      new THREE.LineBasicMaterial({
+-        color: 0x7e93ab,
+-        transparent: true,
+-        opacity: 0.62,
+-      })
+-    );
++    const edgeColor = bodyColor.clone().lerp(new THREE.Color(0x000000), 0.45);
++    const edgeMaterial = new THREE.LineBasicMaterial({
++      color: edgeColor,
++      transparent: true,
++      opacity: 0.5,
++    });
++    const edges = new THREE.LineSegments(edgesGeometry, edgeMaterial);
+     group.add(edges);
+ 
+     this.faceDescriptors.forEach((face, index) => {
+-      group.add(this.createFaceLabel(index + 1, face));
++      group.add(this.createFaceLabel(index + 1, face, labelStyle, bodyColor));
+     });
+ 
+     group.scale.setScalar(this.getVisualScale(diceType.id));
+@@ -303,45 +316,281 @@ export class DiceWebglIcon extends LitElement {
+ 
+   private buildGeometryForDice(diceTypeId: DiceTypeId): {
+     geometry: THREE.BufferGeometry;
++    edgesGeometry: THREE.EdgesGeometry;
+     faces: FaceDescriptor[];
++    labelStyle: LabelStyle;
+   } {
+-    let geometry: THREE.BufferGeometry;
++    let sharpGeometry: THREE.BufferGeometry;
+ 
+     switch (diceTypeId) {
+       case 'd4':
+-        geometry = new THREE.TetrahedronGeometry(1);
++        sharpGeometry = new THREE.TetrahedronGeometry(1);
+         break;
+       case 'd6':
+-        geometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
++        sharpGeometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+         break;
+       case 'd8':
+-        geometry = new THREE.OctahedronGeometry(1.15);
++        sharpGeometry = new THREE.OctahedronGeometry(1.15);
+         break;
+       case 'd10':
+-        geometry = this.createD10Geometry();
++        sharpGeometry = this.createD10Geometry();
+         break;
+       case 'd12':
+-        geometry = new THREE.DodecahedronGeometry(1.05);
++        sharpGeometry = new THREE.DodecahedronGeometry(1.05);
+         break;
+       case 'd20':
+-        geometry = new THREE.IcosahedronGeometry(1.1);
++        sharpGeometry = new THREE.IcosahedronGeometry(1.1);
+         break;
+       default:
+-        geometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
++        sharpGeometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+     }
+ 
+-    this.normalizeGeometrySize(geometry);
+-    geometry.computeVertexNormals();
++    this.normalizeGeometrySize(sharpGeometry);
++    sharpGeometry.computeVertexNormals();
++    const faces = this.extractFaces(sharpGeometry);
++    const edgesGeometry = new THREE.EdgesGeometry(sharpGeometry, 1);
++    const geometry = this.createRoundedGeometry(sharpGeometry, diceTypeId);
++    sharpGeometry.dispose();
+ 
+     return {
+       geometry,
+-      faces: this.extractFaces(geometry),
++      edgesGeometry,
++      faces,
++      labelStyle: diceTypeId === 'd6' ? 'pips' : 'number',
+     };
+   }
+ 
++  private createRoundedGeometry(
++    sourceGeometry: THREE.BufferGeometry,
++    diceTypeId: DiceTypeId
++  ): THREE.BufferGeometry {
++    const roundingPresets: Record<string, [number, number, number]> = {
++      d4:  [2, 0.22, 0.03],
++      d6:  [3, 0.36, 0.07],
++      d8:  [2, 0.14, 0.02],
++      d10: [2, 0.20, 0.03],
++      d12: [2, 0.22, 0.035],
++      d20: [2, 0.20, 0.03],
++    };
++    const [subdivisionIterations, smoothStrength, sphereBlend] =
++      roundingPresets[diceTypeId] ?? [2, 0.28, 0.045];
++
++    let geometry = this.mergeVerticesByPosition(sourceGeometry);
++    geometry = this.subdivideGeometry(geometry, subdivisionIterations);
++    this.relaxGeometry(geometry, smoothStrength, 2);
++    this.blendGeometryTowardSphere(geometry, sphereBlend);
++    this.normalizeGeometrySize(geometry);
++    geometry.computeVertexNormals();
++
++    return geometry;
++  }
++
++  private mergeVerticesByPosition(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
++    const sourceGeometry = geometry.index ? geometry.toNonIndexed() : geometry.clone();
++    const positionAttribute = sourceGeometry.getAttribute('position');
++    const positions: number[] = [];
++    const indices: number[] = [];
++    const uniqueVertexMap = new Map<string, number>();
++    const vertex = new THREE.Vector3();
++
++    for (let index = 0; index < positionAttribute.count; index += 1) {
++      vertex.fromBufferAttribute(positionAttribute, index);
++      const key = this.vertexKey(vertex);
++      const existingIndex = uniqueVertexMap.get(key);
++
++      if (existingIndex !== undefined) {
++        indices.push(existingIndex);
++        continue;
++      }
++
++      const newIndex = positions.length / 3;
++      positions.push(vertex.x, vertex.y, vertex.z);
++      uniqueVertexMap.set(key, newIndex);
++      indices.push(newIndex);
++    }
++
++    sourceGeometry.dispose();
++
++    const mergedGeometry = new THREE.BufferGeometry();
++    mergedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
++    mergedGeometry.setIndex(indices);
++    return mergedGeometry;
++  }
++
++  private subdivideGeometry(
++    geometry: THREE.BufferGeometry,
++    iterations: number
++  ): THREE.BufferGeometry {
++    let currentGeometry = geometry;
++
++    for (let iteration = 0; iteration < iterations; iteration += 1) {
++      const positionAttribute = currentGeometry.getAttribute('position');
++      const indexAttribute = currentGeometry.getIndex();
++
++      if (!indexAttribute) {
++        break;
++      }
++
++      const positions = Array.from(positionAttribute.array);
++      const nextIndices: number[] = [];
++      const midpointCache = new Map<string, number>();
++      const a = new THREE.Vector3();
++      const b = new THREE.Vector3();
++      const midpoint = new THREE.Vector3();
++
++      const getMidpointIndex = (leftIndex: number, rightIndex: number) => {
++        const minIndex = Math.min(leftIndex, rightIndex);
++        const maxIndex = Math.max(leftIndex, rightIndex);
++        const edgeKey = `${minIndex}:${maxIndex}`;
++        const cachedIndex = midpointCache.get(edgeKey);
++
++        if (cachedIndex !== undefined) {
++          return cachedIndex;
++        }
++
++        a.fromArray(positions, leftIndex * 3);
++        b.fromArray(positions, rightIndex * 3);
++        midpoint.copy(a).add(b).multiplyScalar(0.5);
++
++        const newIndex = positions.length / 3;
++        positions.push(midpoint.x, midpoint.y, midpoint.z);
++        midpointCache.set(edgeKey, newIndex);
++
++        return newIndex;
++      };
++
++      for (let index = 0; index < indexAttribute.count; index += 3) {
++        const i0 = indexAttribute.getX(index);
++        const i1 = indexAttribute.getX(index + 1);
++        const i2 = indexAttribute.getX(index + 2);
++        const aMid = getMidpointIndex(i0, i1);
++        const bMid = getMidpointIndex(i1, i2);
++        const cMid = getMidpointIndex(i2, i0);
++
++        nextIndices.push(i0, aMid, cMid, i1, bMid, aMid, i2, cMid, bMid, aMid, bMid, cMid);
++      }
++
++      const nextGeometry = new THREE.BufferGeometry();
++      nextGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
++      nextGeometry.setIndex(nextIndices);
++
++      currentGeometry.dispose();
++      currentGeometry = nextGeometry;
++    }
++
++    return currentGeometry;
++  }
++
++  private relaxGeometry(
++    geometry: THREE.BufferGeometry,
++    strength: number,
++    iterations: number
++  ): void {
++    const positionAttribute = geometry.getAttribute('position');
++    const indexAttribute = geometry.getIndex();
++
++    if (!indexAttribute) {
++      return;
++    }
++
++    const neighbors = Array.from({ length: positionAttribute.count }, () => new Set<number>());
++
++    for (let index = 0; index < indexAttribute.count; index += 3) {
++      const a = indexAttribute.getX(index);
++      const b = indexAttribute.getX(index + 1);
++      const c = indexAttribute.getX(index + 2);
++
++      neighbors[a].add(b);
++      neighbors[a].add(c);
++      neighbors[b].add(a);
++      neighbors[b].add(c);
++      neighbors[c].add(a);
++      neighbors[c].add(b);
++    }
++
++    let currentPositions = Array.from(positionAttribute.array);
++
++    for (let iteration = 0; iteration < iterations; iteration += 1) {
++      const nextPositions = currentPositions.slice();
++
++      for (let vertexIndex = 0; vertexIndex < neighbors.length; vertexIndex += 1) {
++        const adjacentVertices = Array.from(neighbors[vertexIndex]);
++
++        if (adjacentVertices.length === 0) {
++          continue;
++        }
++
++        let averageX = 0;
++        let averageY = 0;
++        let averageZ = 0;
++
++        for (const adjacentIndex of adjacentVertices) {
++          averageX += currentPositions[adjacentIndex * 3];
++          averageY += currentPositions[adjacentIndex * 3 + 1];
++          averageZ += currentPositions[adjacentIndex * 3 + 2];
++        }
++
++        averageX /= adjacentVertices.length;
++        averageY /= adjacentVertices.length;
++        averageZ /= adjacentVertices.length;
++        const baseOffset = vertexIndex * 3;
++        nextPositions[baseOffset] = THREE.MathUtils.lerp(
++          currentPositions[baseOffset],
++          averageX,
++          strength
++        );
++        nextPositions[baseOffset + 1] = THREE.MathUtils.lerp(
++          currentPositions[baseOffset + 1],
++          averageY,
++          strength
++        );
++        nextPositions[baseOffset + 2] = THREE.MathUtils.lerp(
++          currentPositions[baseOffset + 2],
++          averageZ,
++          strength
++        );
++      }
++
++      currentPositions = nextPositions;
++    }
++
++    positionAttribute.array.set(currentPositions);
++    positionAttribute.needsUpdate = true;
++  }
++
++  private blendGeometryTowardSphere(geometry: THREE.BufferGeometry, amount: number): void {
++    if (amount <= 0) {
++      return;
++    }
++
++    geometry.computeBoundingSphere();
++
++    if (!geometry.boundingSphere) {
++      return;
++    }
++
++    const targetRadius = geometry.boundingSphere.radius;
++    const positionAttribute = geometry.getAttribute('position');
++    const vertex = new THREE.Vector3();
++    const spherePoint = new THREE.Vector3();
++
++    for (let index = 0; index < positionAttribute.count; index += 1) {
++      vertex.fromBufferAttribute(positionAttribute, index);
++
++      if (vertex.lengthSq() === 0) {
++        continue;
++      }
++
++      spherePoint.copy(vertex).normalize().multiplyScalar(targetRadius);
++      vertex.lerp(spherePoint, amount);
++      positionAttribute.setXYZ(index, vertex.x, vertex.y, vertex.z);
++    }
++
++    positionAttribute.needsUpdate = true;
++  }
++
+   private createD10Geometry(): THREE.BufferGeometry {
+     const sphereRadius = 1;
+-    // This offset makes each kite face planar while keeping all vertices on one sphere.
+     const ringOffsetY = 0.10557280900008409;
+     const poleHeight = sphereRadius;
+     const radius = Math.sqrt(sphereRadius * sphereRadius - ringOffsetY * ringOffsetY);
+@@ -479,9 +728,21 @@ export class DiceWebglIcon extends LitElement {
+       });
+   }
+ 
+-  private createFaceLabel(value: number, face: FaceDescriptor): THREE.Mesh {
+-    const texture = this.createLabelTexture(value);
+-    const geometry = new THREE.PlaneGeometry(face.size, face.size);
++  /**
++   * Создаёт меш с числовой меткой, прикреплённый к центру грани.
++   * @param value Числовое значение грани
++   * @param face Дескриптор грани (центр, нормаль, размер)
++   * @returns Меш с текстурой числа
++   */
++  private createFaceLabel(
++    value: number,
++    face: FaceDescriptor,
++    labelStyle: LabelStyle,
++    bodyColor: THREE.Color
++  ): THREE.Mesh {
++    const texture = this.createLabelTexture(value, labelStyle, bodyColor);
++    const labelScale = labelStyle === 'pips' ? 0.68 : this.getNumberLabelScale();
++    const geometry = new THREE.PlaneGeometry(face.size * labelScale, face.size * labelScale);
+     const material = new THREE.MeshBasicMaterial({
+       map: texture,
+       transparent: true,
+@@ -489,7 +750,7 @@ export class DiceWebglIcon extends LitElement {
+     });
+ 
+     const mesh = new THREE.Mesh(geometry, material);
+-    mesh.position.copy(face.center).add(face.normal.clone().multiplyScalar(0.05));
++    mesh.position.copy(face.center).add(face.normal.clone().multiplyScalar(0.12));
+ 
+     const upHint = new THREE.Vector3(0, 1, 0);
+     const projectedUp = upHint.sub(face.normal.clone().multiplyScalar(upHint.dot(face.normal)));
+@@ -509,10 +770,19 @@ export class DiceWebglIcon extends LitElement {
+     return mesh;
+   }
+ 
+-  private createLabelTexture(value: number): THREE.CanvasTexture {
++  /**
++   * Создаёт canvas-текстуру с точками-пипсами на прозрачном фоне.
++   * @param value Числовое значение грани
++   * @returns Текстура Three.js
++   */
++  private createLabelTexture(
++    value: number,
++    labelStyle: LabelStyle,
++    bodyColor: THREE.Color
++  ): THREE.CanvasTexture {
+     const canvas = document.createElement('canvas');
+-    canvas.width = 256;
+-    canvas.height = 256;
++    canvas.width = 384;
++    canvas.height = 384;
+ 
+     const context = canvas.getContext('2d');
+ 
+@@ -521,7 +791,12 @@ export class DiceWebglIcon extends LitElement {
+     }
+ 
+     context.clearRect(0, 0, canvas.width, canvas.height);
+-    this.drawPips(context, value);
++
++    if (labelStyle === 'pips') {
++      this.drawPips(context, value, bodyColor);
++    } else {
++      this.drawFaceNumber(context, value, bodyColor);
++    }
+ 
+     const texture = new THREE.CanvasTexture(canvas);
+     texture.colorSpace = THREE.SRGBColorSpace;
+@@ -530,87 +805,117 @@ export class DiceWebglIcon extends LitElement {
+     return texture;
+   }
+ 
+-  private drawPips(context: CanvasRenderingContext2D, value: number) {
+-    if (value > 6) {
+-      this.drawDensePips(context, value);
+-      return;
++  private drawPips(
++    context: CanvasRenderingContext2D,
++    value: number,
++    bodyColor: THREE.Color
++  ): void {
++    const size = 384;
++    const positions = this.getPipPositions(value);
++    const pipRadius = Math.max(12, Math.floor(52 / Math.sqrt(value)));
++    const isLightDie = this.isLightColor(bodyColor);
++    const pipColor = isLightDie ? '#20242c' : '#f7fbff';
++    const shadowColor = isLightDie ? 'rgba(0, 0, 0, 0.16)' : 'rgba(0, 0, 0, 0.22)';
++
++    for (const [nx, ny] of positions) {
++      const x = nx * size;
++      const y = ny * size;
++
++      context.beginPath();
++      context.arc(x, y + 3, pipRadius + 4, 0, Math.PI * 2);
++      context.fillStyle = shadowColor;
++      context.fill();
++
++      context.beginPath();
++      context.arc(x, y, pipRadius, 0, Math.PI * 2);
++      context.fillStyle = pipColor;
++      context.fill();
++    }
++  }
++
++  private drawFaceNumber(
++    context: CanvasRenderingContext2D,
++    value: number,
++    bodyColor: THREE.Color
++  ): void {
++    const inkColor = this.isLightColor(bodyColor) ? '#222831' : '#f8fbff';
++    const outlineColor = this.isLightColor(bodyColor) ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)';
++
++    context.textAlign = 'center';
++    context.textBaseline = 'middle';
++    context.lineJoin = 'round';
++    context.lineCap = 'round';
++    context.font = `bold ${value >= 10 ? 210 : 260}px "Trebuchet MS", "Arial Black", sans-serif`;
++    context.strokeStyle = outlineColor;
++    context.lineWidth = value >= 10 ? 18 : 20;
++    context.shadowColor = 'rgba(0, 0, 0, 0.18)';
++    context.shadowBlur = 20;
++    context.shadowOffsetY = 8;
++    context.strokeText(String(value), 192, 208);
++    context.shadowBlur = 0;
++    context.shadowOffsetY = 0;
++    context.fillStyle = inkColor;
++    context.fillText(String(value), 192, 208);
++  }
++
++  private getNumberLabelScale(): number {
++    switch (this.diceTypeId) {
++      case 'd4':
++        return 0.52;
++      case 'd10':
++        return 0.54;
++      case 'd12':
++        return 0.58;
++      case 'd20':
++        return 0.56;
++      default:
++        return 0.58;
+     }
++  }
++
++  private isLightColor(color: THREE.Color): boolean {
++    const hsl = { h: 0, s: 0, l: 0 };
++    color.getHSL(hsl);
++    return hsl.l > 0.72;
++  }
+ 
+-    const pipMap: Record<number, Array<[number, number]>> = {
+-      1: [[0, 0]],
+-      2: [
+-        [-1, -1],
+-        [1, 1],
+-      ],
+-      3: [
+-        [-1, -1],
+-        [0, 0],
+-        [1, 1],
+-      ],
+-      4: [
+-        [-1, -1],
+-        [1, -1],
+-        [-1, 1],
+-        [1, 1],
+-      ],
+-      5: [
+-        [-1, -1],
+-        [1, -1],
+-        [0, 0],
+-        [-1, 1],
+-        [1, 1],
+-      ],
+-      6: [
+-        [-1, -1],
+-        [1, -1],
+-        [-1, 0],
+-        [1, 0],
+-        [-1, 1],
+-        [1, 1],
+-      ],
++  private getPipPositions(value: number): [number, number][] {
++    const patterns: Record<number, [number, number][]> = {
++      1: [[0.5, 0.5]],
++      2: [[0.3, 0.3], [0.7, 0.7]],
++      3: [[0.3, 0.3], [0.5, 0.5], [0.7, 0.7]],
++      4: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]],
++      5: [[0.3, 0.3], [0.7, 0.3], [0.5, 0.5], [0.3, 0.7], [0.7, 0.7]],
++      6: [[0.3, 0.22], [0.7, 0.22], [0.3, 0.5], [0.7, 0.5], [0.3, 0.78], [0.7, 0.78]],
+     };
+ 
+-    const positions = pipMap[value] ?? pipMap[1];
+-    context.fillStyle = '#13283a';
++    if (patterns[value]) {
++      return patterns[value];
++    }
+ 
+-    positions.forEach(([gridX, gridY]) => {
+-      context.beginPath();
+-      context.arc(128 + gridX * 42, 128 + gridY * 42, 16, 0, Math.PI * 2);
+-      context.fill();
+-    });
++    const cols = value <= 9 ? 3 : value <= 12 ? 4 : 5;
++    return this.makePipGrid(value, cols);
+   }
+ 
+-  private drawDensePips(context: CanvasRenderingContext2D, value: number) {
+-    const columns = value <= 9 ? 3 : value <= 16 ? 4 : 5;
+-    const rows = Math.ceil(value / columns);
+-    const innerSize = 124;
+-    const startY = 128 - innerSize / 2;
+-    const stepX = columns > 1 ? innerSize / (columns - 1) : 0;
+-    const stepY = rows > 1 ? innerSize / (rows - 1) : 0;
+-    const radius = value <= 9 ? 10 : value <= 16 ? 8 : 6.5;
+-    const positions: Array<{ x: number; y: number }> = [];
+-
+-    for (let row = 0; row < rows; row += 1) {
+-      const countInRow = Math.min(columns, value - positions.length);
+-      const rowWidth = countInRow > 1 ? stepX * (countInRow - 1) : 0;
+-      const rowStartX = 128 - rowWidth / 2;
+-      const y = rows > 1 ? startY + row * stepY : 128;
+-
+-      for (let column = 0; column < countInRow; column += 1) {
+-        positions.push({
+-          x: rowStartX + column * stepX,
+-          y,
+-        });
++  private makePipGrid(value: number, cols: number): [number, number][] {
++    const rows = Math.ceil(value / cols);
++    const positions: [number, number][] = [];
++    const margin = 0.18;
++    const spacingX = cols > 1 ? (1 - 2 * margin) / (cols - 1) : 0;
++    const spacingY = rows > 1 ? (1 - 2 * margin) / (rows - 1) : 0;
++
++    for (let row = 0; row < rows; row++) {
++      const rowCount = Math.min(cols, value - row * cols);
++      const y = rows === 1 ? 0.5 : margin + row * spacingY;
++      const rowWidth = (rowCount - 1) * spacingX;
++      const startX = rowCount === 1 ? 0.5 : 0.5 - rowWidth / 2;
++
++      for (let col = 0; col < rowCount; col++) {
++        positions.push([startX + col * spacingX, y]);
+       }
+     }
+ 
+-    context.fillStyle = '#13283a';
+-
+-    positions.forEach(({ x, y }) => {
+-      context.beginPath();
+-      context.arc(x, y, radius, 0, Math.PI * 2);
+-      context.fill();
+-    });
++    return positions;
+   }
+ 
+   private randomizePreviewMotion() {
+@@ -708,7 +1013,7 @@ export class DiceWebglIcon extends LitElement {
+       Math.max(1, Math.round(Number(this.faceValue) || 1))
+     );
+     const targetFace = this.faceDescriptors[safeValue - 1];
+-    const targetDirection = this.camera.position.clone().normalize();
++    const targetDirection = new THREE.Vector3(0, 1, 0);
+     const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(
+       targetFace.normal.clone().normalize(),
+       targetDirection
+diff --git a/src/components/header.ts b/src/components/header.ts
+index 4ab7907..9218227 100644
+--- a/src/components/header.ts
++++ b/src/components/header.ts
+@@ -1,61 +1,45 @@
+ import { LitElement, css, html } from 'lit';
+ import { property, customElement } from 'lit/decorators.js';
+-import { resolveRouterPath } from '../router';
+ 
+-import '@shoelace-style/shoelace/dist/components/button/button.js';
+ @customElement('app-header')
+ export class AppHeader extends LitElement {
+-  @property({ type: Boolean}) enableBack: boolean = false;
++  /** Заголовок страницы, отображаемый по центру хедера */
++  @property({ type: String }) pageTitle = '';
+ 
+   static styles = css`
+     header {
+       display: flex;
+-      justify-content: space-between;
++      justify-content: center;
+       align-items: center;
+-      background: var(--app-color-primary);
+-      color: white;
++      background: rgba(255, 255, 255, 0.92);
++      backdrop-filter: blur(10px);
++      -webkit-backdrop-filter: blur(10px);
++      color: #1a2a3a;
+       box-sizing: border-box;
+       min-height: var(--app-header-height);
+-      padding: var(--app-safe-area-top) 12px 0;
+-
++      padding: var(--app-safe-area-top) 16px 0;
++      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+       position: fixed;
+       left: 0;
+       top: 0;
+       width: 100%;
++      z-index: 50;
+       -webkit-app-region: drag;
+     }
+ 
+-    nav a {
+-      margin-left: 10px;
+-    }
+-
+-    #back-button-block {
+-      display: flex;
+-      justify-content: space-between;
+-      align-items: center;
+-      gap: 8px;
+-    }
+-
+-    @media(prefers-color-scheme: light) {
+-      header {
+-        color: black;
+-      }
+-
+-      nav a {
+-        color: initial;
+-      }
++    h1 {
++      margin: 0;
++      font-size: 17px;
++      font-weight: 700;
++      letter-spacing: -0.01em;
++      color: #1a2a3a;
+     }
+   `;
+ 
+   render() {
+     return html`
+       <header>
+-
+-        <div id="back-button-block">
+-          ${this.enableBack ? html`<sl-button size="small" href="${resolveRouterPath()}">
+-            Back
+-          </sl-button>` : null}
+-        </div>
++        <h1>${this.pageTitle}</h1>
+       </header>
+     `;
+   }
+diff --git a/src/dice-config.ts b/src/dice-config.ts
+index 529a748..775c4fa 100644
+--- a/src/dice-config.ts
++++ b/src/dice-config.ts
+@@ -15,6 +15,8 @@ export interface DiceTypeConfig {
+   outlinePoints: string;
+   innerLines: DiceVisualLine[];
+   labelY: number;
++  /** Основной цвет кубика (hex), используется в WebGL и на всех страницах */
++  color: string;
+ }
+ 
+ export const DEFAULT_DICE_TYPE: DiceTypeId = 'd6';
+@@ -32,6 +34,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
+       { x1: 50, y1: 10, x2: 86, y2: 82 },
+     ],
+     labelY: 60,
++    color: '#e05c8a',
+   },
+   {
+     id: 'd6',
+@@ -44,6 +47,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
+       { x1: 50, y1: 20, x2: 50, y2: 80 },
+     ],
+     labelY: 58,
++    color: '#d94040',
+   },
+   {
+     id: 'd8',
+@@ -60,6 +64,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
+       { x1: 88, y1: 50, x2: 50, y2: 92 },
+     ],
+     labelY: 58,
++    color: '#2bbfb0',
+   },
+   {
+     id: 'd10',
+@@ -73,6 +78,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
+       { x1: 76, y1: 14, x2: 24, y2: 86 },
+     ],
+     labelY: 58,
++    color: '#e07a20',
+   },
+   {
+     id: 'd12',
+@@ -88,6 +94,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
+       { x1: 72, y1: 10, x2: 28, y2: 90 },
+     ],
+     labelY: 58,
++    color: '#8855cc',
+   },
+   {
+     id: 'd20',
+@@ -106,6 +113,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
+       { x1: 84, y1: 28, x2: 50, y2: 94 },
+     ],
+     labelY: 58,
++    color: '#6a7080',
+   },
+ ] as const;
+ 
+diff --git a/src/pages/app-home.ts b/src/pages/app-home.ts
+deleted file mode 100644
+index 7e7868c..0000000
+--- a/src/pages/app-home.ts
++++ /dev/null
+@@ -1,394 +0,0 @@
+-import { LitElement, css, html } from 'lit';
+-import { customElement, state } from 'lit/decorators.js';
+-import { resolveRouterPath } from '../router';
+-import {
+-  clampDiceCount,
+-  DEFAULT_DICE_TYPE,
+-  DICE_TYPES,
+-  getDiceType,
+-  type DiceTypeConfig,
+-} from '../dice-config';
+-
+-import '@shoelace-style/shoelace/dist/components/card/card.js';
+-import '@shoelace-style/shoelace/dist/components/button/button.js';
+-import '../components/dice-webgl-icon';
+-
+-import { styles } from '../styles/shared-styles';
+-
+-@customElement('app-home')
+-export class AppHome extends LitElement {
+-  @state() private selectedDiceType = getDiceType(DEFAULT_DICE_TYPE);
+-  @state() private diceCount = 1;
+-
+-  static styles = [
+-    styles,
+-    css`
+-      #screen {
+-        display: flex;
+-        width: 100%;
+-        height: var(--app-content-height);
+-      }
+-
+-      #selectCard {
+-        box-sizing: border-box;
+-        width: 100%;
+-        height: var(--app-content-height);
+-        padding: 20px;
+-        border-radius: 0;
+-      }
+-
+-      #selectCard::part(body) {
+-        display: flex;
+-        flex-direction: column;
+-        gap: 10px;
+-        box-sizing: border-box;
+-        height: 100%;
+-        padding: 12px;
+-        overflow: auto;
+-      }
+-
+-      h2 {
+-        margin: 0;
+-        font-size: 22px;
+-        line-height: 1.05;
+-      }
+-
+-      #typeGrid {
+-        display: grid;
+-        grid-template-columns: repeat(3, minmax(0, 1fr));
+-        gap: 7px;
+-      }
+-
+-      .typeTile {
+-        box-sizing: border-box;
+-        width: 100%;
+-        min-height: 118px;
+-        padding: 8px 6px 7px;
+-        border: 1.5px solid color-mix(in oklab, var(--app-color-primary) 42%, #90a3b6);
+-        border-radius: 18px;
+-        background:
+-          radial-gradient(circle at 26% 18%, rgba(255, 255, 255, 0.9), transparent 38%),
+-          linear-gradient(
+-            165deg,
+-            color-mix(in oklab, var(--app-color-primary) 14%, #fcfdff) 0%,
+-            #ffffff 44%,
+-            color-mix(in oklab, var(--app-color-primary) 8%, #edf3fb) 100%
+-          );
+-        color: inherit;
+-        display: flex;
+-        flex-direction: column;
+-        justify-content: space-between;
+-        align-items: center;
+-        gap: 4px;
+-        box-shadow:
+-          0 8px 16px rgba(15, 23, 42, 0.12),
+-          0 0 0 1px rgba(255, 255, 255, 0.72) inset;
+-        transition:
+-          transform 120ms ease,
+-          box-shadow 120ms ease,
+-          border-color 120ms ease,
+-          background 120ms ease;
+-        cursor: pointer;
+-        appearance: none;
+-        -webkit-tap-highlight-color: transparent;
+-      }
+-
+-      .typeTile:hover {
+-        transform: translateY(-1px);
+-        box-shadow:
+-          0 12px 22px rgba(15, 23, 42, 0.16),
+-          0 0 0 3px color-mix(in oklab, var(--app-color-primary) 18%, transparent);
+-        border-color: var(--app-color-primary);
+-      }
+-
+-      .typeTile.selected {
+-        border-color: color-mix(in oklab, var(--app-color-primary) 82%, #87a3c2);
+-        background:
+-          radial-gradient(circle at 24% 18%, rgba(255, 255, 255, 0.95), transparent 40%),
+-          linear-gradient(
+-            165deg,
+-            color-mix(in oklab, var(--app-color-primary) 20%, #ffffff) 0%,
+-            #ffffff 42%,
+-            color-mix(in oklab, var(--app-color-primary) 15%, #e6effa) 100%
+-          );
+-        box-shadow:
+-          0 14px 24px rgba(15, 23, 42, 0.16),
+-          0 0 0 3px color-mix(in oklab, var(--app-color-primary) 20%, transparent);
+-        transform: translateY(-1px);
+-      }
+-
+-      .diePreview {
+-        width: 100%;
+-        max-width: 62px;
+-        aspect-ratio: 1 / 1;
+-        margin-top: 2px;
+-      }
+-
+-      dice-webgl-icon {
+-        width: 100%;
+-        height: 100%;
+-      }
+-
+-      .typeMeta {
+-        width: 100%;
+-        display: grid;
+-        justify-items: center;
+-        gap: 2px;
+-        text-align: center;
+-      }
+-
+-      .typeId {
+-        padding: 2px 7px;
+-        border-radius: 999px;
+-        background: rgba(255, 255, 255, 0.9);
+-        box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
+-        font-size: 12px;
+-        line-height: 1;
+-        font-weight: 800;
+-        letter-spacing: 0.08em;
+-      }
+-
+-      .typeName {
+-        min-height: 20px;
+-        display: flex;
+-        align-items: center;
+-        justify-content: center;
+-        font-size: 10px;
+-        line-height: 1.05;
+-        font-weight: 700;
+-        text-wrap: balance;
+-      }
+-
+-      .typeTeaser {
+-        font-size: 9px;
+-        color: #607283;
+-      }
+-
+-      .hintText {
+-        margin: 4px 0 0;
+-        color: #546678;
+-        font-size: 13px;
+-      }
+-
+-      #countCard {
+-        padding: 10px 12px 12px;
+-        border-radius: 16px;
+-        background: color-mix(in oklab, var(--app-color-primary) 8%, white);
+-        box-shadow: inset 0 0 0 1px rgba(138, 160, 184, 0.24);
+-      }
+-
+-      .countHeader {
+-        display: flex;
+-        align-items: center;
+-        justify-content: space-between;
+-        gap: 12px;
+-        font-size: 14px;
+-        font-weight: 700;
+-      }
+-
+-      .countValue {
+-        min-width: 38px;
+-        padding: 3px 8px;
+-        border-radius: 999px;
+-        background: white;
+-        text-align: center;
+-        box-shadow: 0 3px 10px rgba(15, 23, 42, 0.08);
+-      }
+-
+-      #countRange {
+-        width: 100%;
+-        margin: 10px 0 6px;
+-        accent-color: var(--app-color-primary);
+-      }
+-
+-      .rangeMarks {
+-        display: grid;
+-        grid-template-columns: repeat(6, 1fr);
+-        color: #617384;
+-        font-size: 12px;
+-        text-align: center;
+-      }
+-
+-      #actionRow {
+-        margin-top: auto;
+-        display: grid;
+-        gap: 8px;
+-      }
+-
+-      .selectionSummary {
+-        margin: 0;
+-        color: #516274;
+-        font-size: 13px;
+-      }
+-
+-      .typeTile:focus-visible {
+-        outline: 3px solid color-mix(in oklab, var(--app-color-primary) 50%, white);
+-        outline-offset: 2px;
+-      }
+-
+-      @media (min-width: 760px) {
+-        #typeGrid {
+-          grid-template-columns: repeat(6, minmax(0, 1fr));
+-        }
+-
+-        .typeTile {
+-          min-height: 132px;
+-        }
+-
+-        .diePreview {
+-          max-width: 76px;
+-        }
+-      }
+-
+-      @media (max-width: 420px) {
+-        #selectCard::part(body) {
+-          gap: 10px;
+-          padding: 12px;
+-        }
+-
+-        h2 {
+-          font-size: 20px;
+-        }
+-
+-        .typeTile {
+-          min-height: 104px;
+-          padding: 7px 5px 6px;
+-          border-radius: 16px;
+-        }
+-
+-        .diePreview {
+-          max-width: 56px;
+-        }
+-
+-        .typeName {
+-          min-height: 18px;
+-          font-size: 9px;
+-        }
+-
+-        .typeTeaser {
+-          display: none;
+-        }
+-
+-        #countCard {
+-          padding: 10px 12px 12px;
+-        }
+-      }
+-
+-      .typeTile:active {
+-        transform: translateY(0) scale(0.99);
+-      }
+-
+-      .typeTile,
+-      .typeTile * {
+-        user-select: none;
+-      }
+-    `,
+-  ];
+-
+-  firstUpdated() {
+-    const params = new URLSearchParams(window.location.search);
+-    this.selectedDiceType = getDiceType(params.get('type'));
+-    this.diceCount = clampDiceCount(Number(params.get('count')));
+-  }
+-
+-  private getRollPath(): string {
+-    const rollUrl = new URL(resolveRouterPath('roll'), window.location.origin);
+-    rollUrl.searchParams.set('count', String(this.diceCount));
+-    rollUrl.searchParams.set('type', this.selectedDiceType.id);
+-    return `${rollUrl.pathname}${rollUrl.search}`;
+-  }
+-
+-  private getCountWord(count: number): string {
+-    if (count === 1) {
+-      return 'кубик';
+-    }
+-
+-    if (count < 5) {
+-      return 'кубика';
+-    }
+-
+-    return 'кубиков';
+-  }
+-
+-  private updateDiceCount(event: Event) {
+-    const input = event.target as HTMLInputElement;
+-    this.diceCount = clampDiceCount(Number(input.value));
+-  }
+-
+-  private selectDiceType(diceType: DiceTypeConfig) {
+-    this.selectedDiceType = diceType;
+-  }
+-
+-  private renderChoice(diceType: DiceTypeConfig) {
+-    const isSelected = this.selectedDiceType.id === diceType.id;
+-
+-    return html`
+-      <button
+-        type="button"
+-        class="typeTile ${isSelected ? 'selected' : ''}"
+-        @click=${() => this.selectDiceType(diceType)}
+-        aria-pressed="${isSelected ? 'true' : 'false'}"
+-      >
+-        <div class="diePreview">
+-          <dice-webgl-icon dice-type="${diceType.id}"></dice-webgl-icon>
+-        </div>
+-        <div class="typeMeta">
+-          <span class="typeId">${diceType.id.toUpperCase()}</span>
+-          <span class="typeName">${diceType.solidName}</span>
+-          <span class="typeTeaser">${diceType.teaser}</span>
+-        </div>
+-      </button>
+-    `;
+-  }
+-
+-  render() {
+-    return html`
+-      <app-header></app-header>
+-
+-      <main>
+-        <div id="screen">
+-          <sl-card id="selectCard">
+-            <div>
+-              <h2>Выберите тип кубиков</h2>
+-              <p class="hintText">Нажмите на иконку кубика, затем укажите количество от 1 до 6.</p>
+-            </div>
+-
+-            <div id="typeGrid">${DICE_TYPES.map((diceType) => this.renderChoice(diceType))}</div>
+-
+-            <section id="countCard">
+-              <div class="countHeader">
+-                <span>Количество кубиков</span>
+-                <span class="countValue">${this.diceCount}</span>
+-              </div>
+-
+-              <input
+-                id="countRange"
+-                type="range"
+-                min="1"
+-                max="6"
+-                step="1"
+-                .value=${String(this.diceCount)}
+-                @input=${this.updateDiceCount}
+-                aria-label="Количество кубиков"
+-              />
+-
+-              <div class="rangeMarks" aria-hidden="true">
+-                ${Array.from({ length: 6 }, (_, index) => html`<span>${index + 1}</span>`)}
+-              </div>
+-            </section>
+-
+-            <div id="actionRow">
+-              <p class="selectionSummary">
+-                Выбрано: ${this.diceCount} ${this.getCountWord(this.diceCount)}
+-                ${this.selectedDiceType.id.toUpperCase()} (${this.selectedDiceType.solidName.toLowerCase()}).
+-              </p>
+-              <sl-button href="${this.getRollPath()}" variant="primary" size="large">
+-                Перейти к броску
+-              </sl-button>
+-            </div>
+-          </sl-card>
+-        </div>
+-      </main>
+-    `;
+-  }
+-}
+diff --git a/src/pages/app-roll.ts b/src/pages/app-roll.ts
+index 319cc59..1c520f0 100644
+--- a/src/pages/app-roll.ts
++++ b/src/pages/app-roll.ts
+@@ -1,11 +1,12 @@
+ import { LitElement, css, html } from 'lit';
+ import { customElement, state } from 'lit/decorators.js';
+-import { resolveRouterPath } from '../router';
+-import { clampDiceCount, DEFAULT_DICE_TYPE, getDiceType } from '../dice-config';
++import { clampDiceCount, DEFAULT_DICE_TYPE, getDiceType, type DiceTypeConfig } from '../dice-config';
++import { loadSettings, addToHistory } from '../storage';
++import { t, I18nController } from '../i18n';
+ 
+-import '@shoelace-style/shoelace/dist/components/card/card.js';
+-import '@shoelace-style/shoelace/dist/components/button/button.js';
+ import '../components/dice-webgl-icon';
++import '../components/header';
++import '../components/app-tabs';
+ 
+ import { styles } from '../styles/shared-styles';
+ 
+@@ -13,10 +14,12 @@ type RollState = 'idle' | 'rolling' | 'result';
+ 
+ @customElement('app-roll')
+ export class AppRoll extends LitElement {
+-  @state() private diceCount = 1;
+-  @state() private diceType = getDiceType(DEFAULT_DICE_TYPE);
++  constructor() { super(); new I18nController(this); }
++
++  @state() private diceType: DiceTypeConfig = getDiceType(DEFAULT_DICE_TYPE);
++  @state() private diceCount = 2;
+   @state() private rollState: RollState = 'idle';
+-  @state() private currentValues: number[] = [1];
++  @state() private currentValues: number[] = [];
+ 
+   private readonly rollDurationMs = 3000;
+   private rollIntervalId?: number;
+@@ -25,77 +28,78 @@ export class AppRoll extends LitElement {
+   static styles = [
+     styles,
+     css`
+-      #screen {
+-        display: flex;
+-        width: 100%;
+-        height: var(--app-content-height);
+-      }
+-
+-      #rollCard {
+-        box-sizing: border-box;
+-        width: 100%;
+-        height: var(--app-content-height);
+-        padding: 20px;
+-        border-radius: 0;
+-      }
+-
+-      #rollCard::part(body) {
++      main {
++        background: linear-gradient(160deg, var(--felt-bg) 0%, var(--felt-bg-dark) 100%);
+         display: flex;
+         flex-direction: column;
+-        box-sizing: border-box;
+-        height: 100%;
+-        padding: 16px;
++        overflow: hidden;
+       }
+ 
+-      h2 {
+-        margin: 0;
+-      }
+-
+-      #summaryRow {
+-        display: flex;
+-        flex-wrap: wrap;
+-        gap: 8px;
+-        margin-bottom: 10px;
++      #sumBanner {
++        margin: 12px 16px 0;
++        padding: 14px 20px;
++        border-radius: 16px;
++        background: rgba(0, 0, 0, 0.45);
++        backdrop-filter: blur(6px);
++        text-align: center;
++        color: #ffffff;
++        font-size: 28px;
++        font-weight: 800;
++        letter-spacing: -0.02em;
++        flex-shrink: 0;
+       }
+ 
+-      .summaryChip {
+-        padding: 7px 12px;
+-        border-radius: 999px;
+-        background: color-mix(in oklab, var(--app-color-primary) 10%, white);
+-        color: #223243;
+-        font-size: 14px;
+-        box-shadow: inset 0 0 0 1px rgba(138, 160, 184, 0.24);
++      #sumBanner.rolling {
++        opacity: 0.7;
+       }
+ 
+-      #diceRow {
++      #diceArea {
+         flex: 1;
+-        display: flex;
++        display: grid;
+         justify-content: center;
+-        align-items: flex-start;
+-        flex-wrap: wrap;
+-        column-gap: 18px;
+-        row-gap: 10px;
+-        margin: 0;
+-        padding: 10px 8px;
++        align-content: center;
++        gap: 16px;
++        padding: 20px 16px;
++        overflow: hidden;
++      }
++
++      /* Grid columns by count */
++      #diceArea.cols-1 { grid-template-columns: auto; }
++      #diceArea.cols-2 { grid-template-columns: auto auto; }
++      #diceArea.cols-3 { grid-template-columns: auto auto auto; }
++
++      /* Die preview sizes by count */
++      #diceArea.count-1 .diePreview { width: 150px; height: 150px; }
++      #diceArea.count-2 .diePreview { width: 130px; height: 130px; }
++      #diceArea.count-3 .diePreview { width: 96px;  height: 96px; }
++      #diceArea.count-4 .diePreview { width: 120px; height: 120px; }
++      #diceArea.count-5 .diePreview { width: 88px;  height: 88px; }
++      #diceArea.count-6 .diePreview { width: 88px;  height: 88px; }
++
++      /* Center the 2-item last row for 5 dice (3 cols, last row = 2 items):
++         offset = (3 * dieW + 2 * gap − 2 * dieW − 1 * gap) / 2 = (dieW + gap) / 2
++         = (88 + 16) / 2 = 52px */
++      #diceArea.count-5 .dieCard:nth-child(4) {
++        margin-left: 52px;
+       }
+ 
+       .dieCard {
+-        width: min(112px, 100%);
+         display: flex;
+-        align-items: center;
+         flex-direction: column;
++        align-items: center;
+         gap: 8px;
+-        transition: transform 220ms ease;
+       }
+ 
+       .dieCard.rolling {
+-        animation: bounce 420ms ease-in-out infinite alternate;
++        animation: dieBounce 400ms ease-in-out infinite alternate;
+       }
+ 
+       .diePreview {
+-        width: 100%;
+-        max-width: 62px;
+-        aspect-ratio: 1 / 1;
++        /* default (fallback) size */
++        width: 88px;
++        height: 88px;
++        border-radius: 18%;
++        overflow: hidden;
+       }
+ 
+       dice-webgl-icon {
+@@ -103,120 +107,103 @@ export class AppRoll extends LitElement {
+         height: 100%;
+       }
+ 
+-      .dieValueChip {
+-        min-width: 58px;
+-        padding: 5px 10px;
++      .dieValue {
++        min-width: 48px;
++        padding: 4px 10px;
+         border-radius: 999px;
+-        background: rgba(255, 255, 255, 0.96);
+-        box-shadow:
+-          0 6px 14px rgba(15, 23, 42, 0.1),
+-          inset 0 0 0 1px rgba(138, 160, 184, 0.18);
+-        font-size: 12px;
+-        font-weight: 800;
++        background: rgba(255, 255, 255, 0.18);
++        color: #ffffff;
++        font-size: 13px;
++        font-weight: 700;
+         text-align: center;
+-        color: #243445;
+       }
+ 
+-      #actionRow {
+-        padding-top: 12px;
+-        display: grid;
+-        gap: 10px;
++      #rollBtn {
++        display: block;
++        flex-shrink: 0;
++        margin: 0 16px 16px;
++        padding: 16px;
++        border: none;
++        border-radius: 16px;
++        background: var(--app-color-primary);
++        color: #ffffff;
++        font-size: 17px;
++        font-weight: 700;
++        letter-spacing: -0.01em;
++        cursor: pointer;
++        box-shadow: 0 6px 20px rgba(58, 123, 213, 0.38);
++        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
++        text-align: center;
++        box-sizing: border-box;
++        -webkit-tap-highlight-color: transparent;
+       }
+ 
+-      sl-button {
+-        width: 100%;
++      #rollBtn:hover {
++        transform: translateY(-1px);
++        box-shadow: 0 8px 24px rgba(58, 123, 213, 0.46);
+       }
+ 
+-      @keyframes bounce {
+-        0% {
+-          transform: translateY(0);
+-        }
+-        100% {
+-          transform: translateY(-5px);
+-        }
++      #rollBtn:active {
++        transform: scale(0.98);
+       }
+ 
+-      @media (min-width: 760px) {
+-        .dieCard {
+-          width: min(124px, 100%);
+-        }
++      #rollBtn:disabled {
++        opacity: 0.6;
++        cursor: not-allowed;
++        transform: none;
++      }
++
++      @keyframes dieBounce {
++        0%   { transform: translateY(0) rotate(-2deg); }
++        100% { transform: translateY(-8px) rotate(2deg); }
++      }
+ 
+-        .diePreview {
+-          max-width: 76px;
+-        }
++      @media (max-width: 380px) {
++        #diceArea .diePreview { width: 72px; height: 72px; }
++        /* Re-center 2-item last row: (72 + 16) / 2 = 44px */
++        #diceArea.count-5 .dieCard:nth-child(4) { margin-left: 44px; }
+       }
+ 
+       @media (prefers-reduced-motion: reduce) {
+-        .dieCard.rolling {
+-          animation: none;
+-        }
++        .dieCard.rolling { animation: none; }
+       }
+     `,
+   ];
+ 
+   firstUpdated() {
+-    this.readSelectionFromQuery();
+-    this.currentValues = this.createRandomRoll(this.diceCount);
++    const settings = loadSettings();
++    this.diceType = getDiceType(settings.type);
++    this.diceCount = clampDiceCount(settings.count);
++    this.currentValues = this.makeRoll(this.diceCount);
++    this.rollState = 'result';
+   }
+ 
+   disconnectedCallback() {
+     super.disconnectedCallback();
+-    this.clearRollTimers();
+-  }
+-
+-  private readSelectionFromQuery() {
+-    const params = new URLSearchParams(window.location.search);
+-    this.diceType = getDiceType(params.get('type'));
+-    this.diceCount = clampDiceCount(Number(params.get('count')));
+-  }
+-
+-  private getSelectionPath(): string {
+-    const selectionUrl = new URL(resolveRouterPath(), window.location.origin);
+-    selectionUrl.searchParams.set('count', String(this.diceCount));
+-    selectionUrl.searchParams.set('type', this.diceType.id);
+-    return `${selectionUrl.pathname}${selectionUrl.search}`;
+-  }
+-
+-  private createRandomValue(): number {
+-    return Math.floor(Math.random() * this.diceType.sides) + 1;
+-  }
+-
+-  private createRandomRoll(count: number): number[] {
+-    return Array.from({ length: count }, () => this.createRandomValue());
++    this.clearTimers();
+   }
+ 
+-  private getTotalValue(): number {
+-    return this.currentValues.reduce((sum, value) => sum + value, 0);
++  private get gridCols(): number {
++    if (this.diceCount <= 3) return this.diceCount;
++    if (this.diceCount === 4) return 2;
++    return 3; // 5, 6
+   }
+ 
+-  private getMotionMode(): 'rolling' | 'still' {
+-    return this.rollState === 'rolling' ? 'rolling' : 'still';
++  private makeRoll(count: number): number[] {
++    return Array.from({ length: count }, () =>
++      Math.floor(Math.random() * this.diceType.sides) + 1
++    );
+   }
+ 
+-  private renderDie(value: number, index: number) {
+-    const isRolling = this.rollState === 'rolling';
+-
+-    return html`
+-      <div class="dieCard ${isRolling ? 'rolling' : ''}" role="img" aria-label="${this.diceType.id.toUpperCase()}: ${value}">
+-        <div class="diePreview">
+-          <dice-webgl-icon
+-            dice-type="${this.diceType.id}"
+-            motion-mode="${this.getMotionMode()}"
+-            roll-duration-ms="${this.rollDurationMs}"
+-            face-value="${value}"
+-          ></dice-webgl-icon>
+-        </div>
+-        <div class="dieValueChip">#${index + 1}: ${value}</div>
+-      </div>
+-    `;
++  private getTotal(): number {
++    return this.currentValues.reduce((sum, v) => sum + v, 0);
+   }
+ 
+-  private clearRollTimers() {
++  private clearTimers() {
+     if (this.rollIntervalId !== undefined) {
+       window.clearInterval(this.rollIntervalId);
+       this.rollIntervalId = undefined;
+     }
+-
+     if (this.rollTimeoutId !== undefined) {
+       window.clearTimeout(this.rollTimeoutId);
+       this.rollTimeoutId = undefined;
+@@ -224,60 +211,83 @@ export class AppRoll extends LitElement {
+   }
+ 
+   private rollDice() {
+-    if (this.rollState === 'rolling') {
+-      return;
+-    }
++    if (this.rollState === 'rolling') return;
+ 
+-    this.clearRollTimers();
++    this.clearTimers();
+     this.rollState = 'rolling';
+-    this.currentValues = this.createRandomRoll(this.diceCount);
++    this.currentValues = this.makeRoll(this.diceCount);
+ 
+     this.rollIntervalId = window.setInterval(() => {
+-      this.currentValues = this.createRandomRoll(this.diceCount);
++      this.currentValues = this.makeRoll(this.diceCount);
+     }, 120);
+ 
+     this.rollTimeoutId = window.setTimeout(() => {
+-      this.clearRollTimers();
+-      this.currentValues = this.createRandomRoll(this.diceCount);
++      this.clearTimers();
++      const finalValues = this.makeRoll(this.diceCount);
++      this.currentValues = finalValues;
+       this.rollState = 'result';
++
++      addToHistory({
++        id: crypto.randomUUID(),
++        timestamp: Date.now(),
++        diceType: this.diceType.id,
++        diceCount: this.diceCount,
++        values: finalValues,
++        total: finalValues.reduce((s, v) => s + v, 0),
++      });
+     }, this.rollDurationMs);
+   }
+ 
++  private renderDie(value: number, index: number) {
++    const isRolling = this.rollState === 'rolling';
++    const motionMode = isRolling ? 'rolling' : 'still';
++
++    return html`
++      <div
++        class="dieCard ${isRolling ? 'rolling' : ''}"
++        role="img"
++        aria-label="${this.diceType.id.toUpperCase()} #${index + 1}: ${value}"
++      >
++        <div class="diePreview">
++          <dice-webgl-icon
++            dice-type="${this.diceType.id}"
++            dice-color="${this.diceType.color}"
++            motion-mode="${motionMode}"
++            roll-duration-ms="${this.rollDurationMs}"
++            face-value="${value}"
++          ></dice-webgl-icon>
++        </div>
++        <div class="dieValue">${value}</div>
++      </div>
++    `;
++  }
++
+   render() {
++    const isRolling = this.rollState === 'rolling';
++
+     return html`
+-      <app-header></app-header>
++      <app-header pageTitle="${t('headerRoll')}"></app-header>
+ 
+       <main>
+-        <div id="screen">
+-          <sl-card id="rollCard">
+-            <h2>${this.diceType.id.toUpperCase()} · ${this.diceType.solidName}</h2>
+-
+-            <div id="summaryRow">
+-              <span class="summaryChip">Кубиков: ${this.diceCount}</span>
+-              <span class="summaryChip">Граней: ${this.diceType.sides}</span>
+-              <span class="summaryChip">Сумма: ${this.getTotalValue()}</span>
+-            </div>
+-
+-            <div id="diceRow">
+-              ${this.currentValues.map((value, index) => this.renderDie(value, index))}
+-            </div>
+-
+-            <div id="actionRow">
+-              <sl-button
+-                variant="primary"
+-                size="large"
+-                @click=${this.rollDice}
+-                ?disabled=${this.rollState === 'rolling'}
+-              >
+-                Бросаю
+-              </sl-button>
+-              <sl-button href="${this.getSelectionPath()}" variant="default" size="large">
+-                К выбору кубиков
+-              </sl-button>
+-            </div>
+-          </sl-card>
++        <div id="sumBanner" class="${isRolling ? 'rolling' : ''}">
++          ${t('sumLabel')} ${this.getTotal()}
++        </div>
++
++        <div id="diceArea" class="cols-${this.gridCols} count-${this.diceCount}">
++          ${this.currentValues.map((value, index) => this.renderDie(value, index))}
+         </div>
++
++        <button
++          id="rollBtn"
++          @click=${this.rollDice}
++          ?disabled=${isRolling}
++          aria-label="${t('rollBtnAria')}"
++        >
++          ${t('rollBtn')}
++        </button>
+       </main>
++
++      <app-tabs activeTab="roll"></app-tabs>
+     `;
+   }
+ }
+diff --git a/src/router.ts b/src/router.ts
+index 08f132a..140916b 100644
+--- a/src/router.ts
++++ b/src/router.ts
+@@ -1,9 +1,9 @@
+-// docs for router https://github.com/thepassle/app-tools/blob/master/router/README.md
++// Документация роутера: https://github.com/thepassle/app-tools/blob/master/router/README.md
+ 
+ import { html } from 'lit';
+ 
+ if (!(globalThis as any).URLPattern) {
+-  await import("urlpattern-polyfill");
++  await import('urlpattern-polyfill');
+ }
+ 
+ import { Router } from '@thepassle/app-tools/router.js';
+@@ -11,35 +11,41 @@ import { Router } from '@thepassle/app-tools/router.js';
+ // @ts-ignore
+ import { title } from '@thepassle/app-tools/router/plugins/title.js';
+ 
+-import './pages/app-home.js';
+ import './pages/app-roll.js';
++import './pages/app-history.js';
++import './pages/app-settings.js';
+ 
+ const baseURL: string = (import.meta as any).env.BASE_URL;
+ 
+ export const router = new Router({
+-    routes: [
+-      {
+-        path: resolveRouterPath(),
+-        title: 'Выбор кубиков',
+-        render: () => html`<app-home></app-home>`
+-      },
+-      {
+-        path: resolveRouterPath('roll'),
+-        title: 'Бросок',
+-        render: () => html`<app-roll></app-roll>`
+-      }
+-    ]
+-  });
+-
+-  // This function will resolve a path with whatever Base URL was passed to the vite build process.
+-  // Use of this function throughout the starter is not required, but highly recommended, especially if you plan to use GitHub Pages to deploy.
+-  // If no arg is passed to this function, it will return the base URL.
+-
+-  export function resolveRouterPath(unresolvedPath?: string) {
+-    var resolvedPath = baseURL;
+-    if(unresolvedPath) {
+-      resolvedPath = resolvedPath + unresolvedPath;
+-    }
+-
+-    return resolvedPath;
++  routes: [
++    {
++      path: resolveRouterPath(),
++      title: 'Бросок кубиков',
++      render: () => html`<app-roll></app-roll>`,
++    },
++    {
++      path: resolveRouterPath('history'),
++      title: 'История бросков',
++      render: () => html`<app-history></app-history>`,
++    },
++    {
++      path: resolveRouterPath('settings'),
++      title: 'Настройки броска',
++      render: () => html`<app-settings></app-settings>`,
++    },
++  ],
++});
++
++/**
++ * Разрешает маршрутный путь относительно базового URL приложения.
++ * @param unresolvedPath Относительный путь (например, 'history')
++ * @returns Полный путь с учётом BASE_URL
++ */
++export function resolveRouterPath(unresolvedPath?: string): string {
++  let resolvedPath = baseURL;
++  if (unresolvedPath) {
++    resolvedPath = resolvedPath + unresolvedPath;
+   }
++  return resolvedPath;
++}
+diff --git a/src/styles/global.css b/src/styles/global.css
+index 79688d6..196c278 100644
+--- a/src/styles/global.css
++++ b/src/styles/global.css
+@@ -1,17 +1,32 @@
+-
+ /*
+-  This file is used for all of your global styles and CSS variables.
+-  Check here https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties for more info on using CSS variables.
++  Глобальные CSS-переменные и базовые стили приложения.
+ */
+ :root {
+-  --font-family: sans-serif;
++  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
++
++  /* Отступы безопасной зоны устройства */
+   --app-safe-area-top: env(safe-area-inset-top, 0px);
+   --app-safe-area-right: env(safe-area-inset-right, 0px);
+   --app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
+   --app-safe-area-left: env(safe-area-inset-left, 0px);
+-  --app-header-base-height: 34px;
++
++  /* Хедер */
++  --app-header-base-height: 44px;
+   --app-header-height: calc(var(--app-header-base-height) + var(--app-safe-area-top));
+-  --app-content-height: calc(100dvh - var(--app-header-height) - var(--app-safe-area-bottom));
++
++  /* Нижний таббар */
++  --app-tab-bar-base-height: 56px;
++  --app-tab-bar-height: calc(var(--app-tab-bar-base-height) + var(--app-safe-area-bottom));
++
++  /* Высота контентной области (между хедером и таббаром) */
++  --app-content-height: calc(100dvh - var(--app-header-height) - var(--app-tab-bar-height));
++
++  /* Фон зелёного стола (для страницы броска) */
++  --felt-bg: #2d6a4f;
++  --felt-bg-dark: #1b4332;
++
++  /* Основной акцентный цвет (кнопки, активные элементы) */
++  --app-color-primary: #3a7bd5;
+ }
+ 
+ html, body {
+@@ -20,6 +35,8 @@ html, body {
+   margin: 0;
+   width: 100%;
+   height: 100dvh;
++  background-color: #f2f4f8;
++  color: #1a2a3a;
+ }
+ 
+ app-index {
+@@ -27,21 +44,3 @@ app-index {
+   width: 100%;
+   height: 100dvh;
+ }
+-
+-@media (prefers-color-scheme: dark) {
+-
+-  html,
+-  body {
+-    background-color: #181818;
+-    color: white;
+-  }
+-}
+-
+-@media (prefers-color-scheme: light) {
+-
+-  html,
+-  body {
+-    background-color: #f5f5f5;
+-    color: black;
+-  }
+-}
+\ No newline at end of file
+diff --git a/src/styles/shared-styles.ts b/src/styles/shared-styles.ts
+index 2bd0375..07b1d4a 100644
+--- a/src/styles/shared-styles.ts
++++ b/src/styles/shared-styles.ts
+@@ -1,29 +1,18 @@
+ import { css } from 'lit';
+ 
+-// these styles can be imported from any component
+-// for an example of how to use this, check /pages/about-about.ts
++/**
++ * Общие стили для всех страниц.
++ * main — контентная область между хедером (сверху) и таббаром (снизу).
++ */
+ export const styles = css`
+-  sl-card {
+-    height: 100%;
+-  }
+-
+-  sl-card::part(base) {
+-    height: 100%;
+-  }
+-
+-  sl-card::part(body) {
+-    box-sizing: border-box;
+-    height: 100%;
+-  }
+-
+   main {
+     box-sizing: border-box;
+     width: 100%;
+     height: 100dvh;
+-    padding: 0;
++    /* Отступ сверху = высота хедера, снизу = высота таббара */
+     padding-top: var(--app-header-height);
++    padding-bottom: var(--app-tab-bar-height);
+     padding-right: var(--app-safe-area-right);
+-    padding-bottom: var(--app-safe-area-bottom);
+     padding-left: var(--app-safe-area-left);
+   }
+ `;

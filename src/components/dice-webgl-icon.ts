@@ -18,12 +18,16 @@ type FaceAccumulator = {
   vertices: Map<string, THREE.Vector3>;
 };
 
+type LabelStyle = 'pips' | 'number';
+
 @customElement('dice-webgl-icon')
 export class DiceWebglIcon extends LitElement {
   @property({ type: String, attribute: 'dice-type' }) diceTypeId: DiceTypeId = DEFAULT_DICE_TYPE;
   @property({ type: String, attribute: 'motion-mode' }) motionMode: MotionMode = 'preview';
   @property({ type: Number, attribute: 'roll-duration-ms' }) rollDurationMs = 3000;
   @property({ type: Number, attribute: 'face-value' }) faceValue = 1;
+  /** Цвет кубика в hex-формате, берётся из diceType.color */
+  @property({ type: String, attribute: 'dice-color' }) diceColor = '#d94040';
 
   @state() private hasWebglError = false;
 
@@ -65,7 +69,7 @@ export class DiceWebglIcon extends LitElement {
   private camera?: THREE.PerspectiveCamera;
   private diceRoot?: THREE.Group;
   private resizeObserver?: ResizeObserver;
-  private readonly clock = new THREE.Clock();
+  private readonly timer = new THREE.Timer();
   private readonly previewVelocity = new THREE.Vector3();
   private readonly rollAxis = new THREE.Vector3(1, 1, 1);
   private prefersReducedMotion = false;
@@ -94,6 +98,11 @@ export class DiceWebglIcon extends LitElement {
 
   updated(changedProperties: Map<string, unknown>) {
     if (changedProperties.has('diceTypeId') && this.scene) {
+      this.rebuildDie();
+    }
+
+    // При смене цвета — перестраиваем кубик целиком (меняется материал)
+    if (changedProperties.has('diceColor') && this.scene) {
       this.rebuildDie();
     }
 
@@ -138,15 +147,16 @@ export class DiceWebglIcon extends LitElement {
     this.scene = new THREE.Scene();
 
     this.camera = new THREE.PerspectiveCamera(28, 1, 0.1, 100);
-    this.camera.position.set(0, 0.18, 4.2);
+    this.camera.position.set(0.7, 3.9, 2.2);
+    this.camera.lookAt(0, 0, 0);
 
-    const ambientLight = new THREE.AmbientLight(0xffffff, 1.6);
-    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0xc6d3e3, 1.4);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.45);
+    const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x1a1a2a, 1.8);
     hemisphereLight.position.set(0, 2, 0);
-    const keyLight = new THREE.DirectionalLight(0xffffff, 1.7);
-    keyLight.position.set(2.6, 3.2, 4.6);
-    const fillLight = new THREE.DirectionalLight(0xa5c4ff, 0.65);
-    fillLight.position.set(-3.2, -1.4, 2.2);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 2.6);
+    keyLight.position.set(0.3, 6.0, 1.0);
+    const fillLight = new THREE.DirectionalLight(0x6688aa, 0.2);
+    fillLight.position.set(-3.0, -1.0, 2.0);
 
     this.scene.add(ambientLight, hemisphereLight, keyLight, fillLight);
 
@@ -157,7 +167,6 @@ export class DiceWebglIcon extends LitElement {
     this.resizeObserver = new ResizeObserver(() => this.resizeCanvas());
     this.resizeObserver.observe(this);
 
-    this.clock.start();
     this.renderer.setAnimationLoop(this.renderFrame);
   }
 
@@ -175,8 +184,13 @@ export class DiceWebglIcon extends LitElement {
       this.diceRoot = undefined;
     }
 
-    this.renderer?.dispose();
-    this.renderer = undefined;
+    if (this.renderer) {
+      const gl = this.renderer.getContext();
+      gl.getExtension('WEBGL_lose_context')?.loseContext();
+      this.renderer.dispose();
+      this.renderer = undefined;
+    }
+
     this.scene = undefined;
     this.camera = undefined;
   }
@@ -213,12 +227,13 @@ export class DiceWebglIcon extends LitElement {
     this.syncMotionMode(new Map());
   }
 
-  private readonly renderFrame = () => {
+  private readonly renderFrame = (timestamp: number) => {
     if (!this.renderer || !this.scene || !this.camera || !this.diceRoot) {
       return;
     }
 
-    const delta = this.clock.getDelta();
+    this.timer.update(timestamp);
+    const delta = this.timer.getDelta();
 
     if (!this.prefersReducedMotion) {
       if (this.motionMode === 'preview') {
@@ -261,39 +276,42 @@ export class DiceWebglIcon extends LitElement {
     this.renderer.render(this.scene, this.camera);
   };
 
+  /**
+   * Создаёт группу Three.js для кубика выбранного типа и цвета.
+   * @returns Готовая группа объектов сцены
+   */
   private createDieGroup(): THREE.Group {
     const diceType = getDiceType(this.diceTypeId);
-    const { geometry, faces } = this.buildGeometryForDice(diceType.id);
+    const { geometry, edgesGeometry, faces, labelStyle } = this.buildGeometryForDice(diceType.id);
     const group = new THREE.Group();
     this.faceDescriptors = faces.slice(0, diceType.sides);
 
+    const bodyColor = new THREE.Color(this.diceColor);
     const shellMaterial = new THREE.MeshPhysicalMaterial({
-      color: 0xf9fbff,
-      metalness: 0.04,
-      roughness: 0.26,
-      clearcoat: 0.7,
-      clearcoatRoughness: 0.32,
-      sheen: 0.35,
-      sheenColor: 0xeaf1ff,
-      transparent: true,
-      opacity: 0.98,
+      color: bodyColor,
+      metalness: 0.02,
+      roughness: 0.24,
+      clearcoat: 0.45,
+      clearcoatRoughness: 0.35,
+      sheen: 0.25,
+      sheenColor: bodyColor.clone().lerp(new THREE.Color(0xffffff), 0.32),
+      opacity: 1,
     });
 
     const shell = new THREE.Mesh(geometry, shellMaterial);
     group.add(shell);
 
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(geometry, 8),
-      new THREE.LineBasicMaterial({
-        color: 0x7e93ab,
-        transparent: true,
-        opacity: 0.62,
-      })
-    );
+    const edgeColor = bodyColor.clone().lerp(new THREE.Color(0x000000), 0.45);
+    const edgeMaterial = new THREE.LineBasicMaterial({
+      color: edgeColor,
+      transparent: true,
+      opacity: 0.5,
+    });
+    const edges = new THREE.LineSegments(edgesGeometry, edgeMaterial);
     group.add(edges);
 
     this.faceDescriptors.forEach((face, index) => {
-      group.add(this.createFaceLabel(index + 1, face));
+      group.add(this.createFaceLabel(index + 1, face, labelStyle, bodyColor));
     });
 
     group.scale.setScalar(this.getVisualScale(diceType.id));
@@ -303,45 +321,281 @@ export class DiceWebglIcon extends LitElement {
 
   private buildGeometryForDice(diceTypeId: DiceTypeId): {
     geometry: THREE.BufferGeometry;
+    edgesGeometry: THREE.EdgesGeometry;
     faces: FaceDescriptor[];
+    labelStyle: LabelStyle;
   } {
-    let geometry: THREE.BufferGeometry;
+    let sharpGeometry: THREE.BufferGeometry;
 
     switch (diceTypeId) {
       case 'd4':
-        geometry = new THREE.TetrahedronGeometry(1);
+        sharpGeometry = new THREE.TetrahedronGeometry(1);
         break;
       case 'd6':
-        geometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+        sharpGeometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
         break;
       case 'd8':
-        geometry = new THREE.OctahedronGeometry(1.15);
+        sharpGeometry = new THREE.OctahedronGeometry(1.15);
         break;
       case 'd10':
-        geometry = this.createD10Geometry();
+        sharpGeometry = this.createD10Geometry();
         break;
       case 'd12':
-        geometry = new THREE.DodecahedronGeometry(1.05);
+        sharpGeometry = new THREE.DodecahedronGeometry(1.05);
         break;
       case 'd20':
-        geometry = new THREE.IcosahedronGeometry(1.1);
+        sharpGeometry = new THREE.IcosahedronGeometry(1.1);
         break;
       default:
-        geometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
+        sharpGeometry = new THREE.BoxGeometry(1.55, 1.55, 1.55);
     }
 
-    this.normalizeGeometrySize(geometry);
-    geometry.computeVertexNormals();
+    this.normalizeGeometrySize(sharpGeometry);
+    sharpGeometry.computeVertexNormals();
+    const faces = this.extractFaces(sharpGeometry);
+    const edgesGeometry = new THREE.EdgesGeometry(sharpGeometry, 1);
+    const geometry = this.createRoundedGeometry(sharpGeometry, diceTypeId);
+    sharpGeometry.dispose();
 
     return {
       geometry,
-      faces: this.extractFaces(geometry),
+      edgesGeometry,
+      faces,
+      labelStyle: diceTypeId === 'd6' ? 'pips' : 'number',
     };
+  }
+
+  private createRoundedGeometry(
+    sourceGeometry: THREE.BufferGeometry,
+    diceTypeId: DiceTypeId
+  ): THREE.BufferGeometry {
+    const roundingPresets: Record<string, [number, number, number]> = {
+      d4:  [2, 0.22, 0.03],
+      d6:  [3, 0.36, 0.07],
+      d8:  [2, 0.14, 0.02],
+      d10: [2, 0.20, 0.03],
+      d12: [2, 0.22, 0.035],
+      d20: [2, 0.20, 0.03],
+    };
+    const [subdivisionIterations, smoothStrength, sphereBlend] =
+      roundingPresets[diceTypeId] ?? [2, 0.28, 0.045];
+
+    let geometry = this.mergeVerticesByPosition(sourceGeometry);
+    geometry = this.subdivideGeometry(geometry, subdivisionIterations);
+    this.relaxGeometry(geometry, smoothStrength, 2);
+    this.blendGeometryTowardSphere(geometry, sphereBlend);
+    this.normalizeGeometrySize(geometry);
+    geometry.computeVertexNormals();
+
+    return geometry;
+  }
+
+  private mergeVerticesByPosition(geometry: THREE.BufferGeometry): THREE.BufferGeometry {
+    const sourceGeometry = geometry.index ? geometry.toNonIndexed() : geometry.clone();
+    const positionAttribute = sourceGeometry.getAttribute('position');
+    const positions: number[] = [];
+    const indices: number[] = [];
+    const uniqueVertexMap = new Map<string, number>();
+    const vertex = new THREE.Vector3();
+
+    for (let index = 0; index < positionAttribute.count; index += 1) {
+      vertex.fromBufferAttribute(positionAttribute, index);
+      const key = this.vertexKey(vertex);
+      const existingIndex = uniqueVertexMap.get(key);
+
+      if (existingIndex !== undefined) {
+        indices.push(existingIndex);
+        continue;
+      }
+
+      const newIndex = positions.length / 3;
+      positions.push(vertex.x, vertex.y, vertex.z);
+      uniqueVertexMap.set(key, newIndex);
+      indices.push(newIndex);
+    }
+
+    sourceGeometry.dispose();
+
+    const mergedGeometry = new THREE.BufferGeometry();
+    mergedGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    mergedGeometry.setIndex(indices);
+    return mergedGeometry;
+  }
+
+  private subdivideGeometry(
+    geometry: THREE.BufferGeometry,
+    iterations: number
+  ): THREE.BufferGeometry {
+    let currentGeometry = geometry;
+
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      const positionAttribute = currentGeometry.getAttribute('position');
+      const indexAttribute = currentGeometry.getIndex();
+
+      if (!indexAttribute) {
+        break;
+      }
+
+      const positions = Array.from(positionAttribute.array);
+      const nextIndices: number[] = [];
+      const midpointCache = new Map<string, number>();
+      const a = new THREE.Vector3();
+      const b = new THREE.Vector3();
+      const midpoint = new THREE.Vector3();
+
+      const getMidpointIndex = (leftIndex: number, rightIndex: number) => {
+        const minIndex = Math.min(leftIndex, rightIndex);
+        const maxIndex = Math.max(leftIndex, rightIndex);
+        const edgeKey = `${minIndex}:${maxIndex}`;
+        const cachedIndex = midpointCache.get(edgeKey);
+
+        if (cachedIndex !== undefined) {
+          return cachedIndex;
+        }
+
+        a.fromArray(positions, leftIndex * 3);
+        b.fromArray(positions, rightIndex * 3);
+        midpoint.copy(a).add(b).multiplyScalar(0.5);
+
+        const newIndex = positions.length / 3;
+        positions.push(midpoint.x, midpoint.y, midpoint.z);
+        midpointCache.set(edgeKey, newIndex);
+
+        return newIndex;
+      };
+
+      for (let index = 0; index < indexAttribute.count; index += 3) {
+        const i0 = indexAttribute.getX(index);
+        const i1 = indexAttribute.getX(index + 1);
+        const i2 = indexAttribute.getX(index + 2);
+        const aMid = getMidpointIndex(i0, i1);
+        const bMid = getMidpointIndex(i1, i2);
+        const cMid = getMidpointIndex(i2, i0);
+
+        nextIndices.push(i0, aMid, cMid, i1, bMid, aMid, i2, cMid, bMid, aMid, bMid, cMid);
+      }
+
+      const nextGeometry = new THREE.BufferGeometry();
+      nextGeometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      nextGeometry.setIndex(nextIndices);
+
+      currentGeometry.dispose();
+      currentGeometry = nextGeometry;
+    }
+
+    return currentGeometry;
+  }
+
+  private relaxGeometry(
+    geometry: THREE.BufferGeometry,
+    strength: number,
+    iterations: number
+  ): void {
+    const positionAttribute = geometry.getAttribute('position');
+    const indexAttribute = geometry.getIndex();
+
+    if (!indexAttribute) {
+      return;
+    }
+
+    const neighbors = Array.from({ length: positionAttribute.count }, () => new Set<number>());
+
+    for (let index = 0; index < indexAttribute.count; index += 3) {
+      const a = indexAttribute.getX(index);
+      const b = indexAttribute.getX(index + 1);
+      const c = indexAttribute.getX(index + 2);
+
+      neighbors[a].add(b);
+      neighbors[a].add(c);
+      neighbors[b].add(a);
+      neighbors[b].add(c);
+      neighbors[c].add(a);
+      neighbors[c].add(b);
+    }
+
+    let currentPositions = Array.from(positionAttribute.array);
+
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      const nextPositions = currentPositions.slice();
+
+      for (let vertexIndex = 0; vertexIndex < neighbors.length; vertexIndex += 1) {
+        const adjacentVertices = Array.from(neighbors[vertexIndex]);
+
+        if (adjacentVertices.length === 0) {
+          continue;
+        }
+
+        let averageX = 0;
+        let averageY = 0;
+        let averageZ = 0;
+
+        for (const adjacentIndex of adjacentVertices) {
+          averageX += currentPositions[adjacentIndex * 3];
+          averageY += currentPositions[adjacentIndex * 3 + 1];
+          averageZ += currentPositions[adjacentIndex * 3 + 2];
+        }
+
+        averageX /= adjacentVertices.length;
+        averageY /= adjacentVertices.length;
+        averageZ /= adjacentVertices.length;
+        const baseOffset = vertexIndex * 3;
+        nextPositions[baseOffset] = THREE.MathUtils.lerp(
+          currentPositions[baseOffset],
+          averageX,
+          strength
+        );
+        nextPositions[baseOffset + 1] = THREE.MathUtils.lerp(
+          currentPositions[baseOffset + 1],
+          averageY,
+          strength
+        );
+        nextPositions[baseOffset + 2] = THREE.MathUtils.lerp(
+          currentPositions[baseOffset + 2],
+          averageZ,
+          strength
+        );
+      }
+
+      currentPositions = nextPositions;
+    }
+
+    positionAttribute.array.set(currentPositions);
+    positionAttribute.needsUpdate = true;
+  }
+
+  private blendGeometryTowardSphere(geometry: THREE.BufferGeometry, amount: number): void {
+    if (amount <= 0) {
+      return;
+    }
+
+    geometry.computeBoundingSphere();
+
+    if (!geometry.boundingSphere) {
+      return;
+    }
+
+    const targetRadius = geometry.boundingSphere.radius;
+    const positionAttribute = geometry.getAttribute('position');
+    const vertex = new THREE.Vector3();
+    const spherePoint = new THREE.Vector3();
+
+    for (let index = 0; index < positionAttribute.count; index += 1) {
+      vertex.fromBufferAttribute(positionAttribute, index);
+
+      if (vertex.lengthSq() === 0) {
+        continue;
+      }
+
+      spherePoint.copy(vertex).normalize().multiplyScalar(targetRadius);
+      vertex.lerp(spherePoint, amount);
+      positionAttribute.setXYZ(index, vertex.x, vertex.y, vertex.z);
+    }
+
+    positionAttribute.needsUpdate = true;
   }
 
   private createD10Geometry(): THREE.BufferGeometry {
     const sphereRadius = 1;
-    // This offset makes each kite face planar while keeping all vertices on one sphere.
     const ringOffsetY = 0.10557280900008409;
     const poleHeight = sphereRadius;
     const radius = Math.sqrt(sphereRadius * sphereRadius - ringOffsetY * ringOffsetY);
@@ -479,9 +733,21 @@ export class DiceWebglIcon extends LitElement {
       });
   }
 
-  private createFaceLabel(value: number, face: FaceDescriptor): THREE.Mesh {
-    const texture = this.createLabelTexture(value);
-    const geometry = new THREE.PlaneGeometry(face.size, face.size);
+  /**
+   * Создаёт меш с числовой меткой, прикреплённый к центру грани.
+   * @param value Числовое значение грани
+   * @param face Дескриптор грани (центр, нормаль, размер)
+   * @returns Меш с текстурой числа
+   */
+  private createFaceLabel(
+    value: number,
+    face: FaceDescriptor,
+    labelStyle: LabelStyle,
+    bodyColor: THREE.Color
+  ): THREE.Mesh {
+    const texture = this.createLabelTexture(value, labelStyle, bodyColor);
+    const labelScale = labelStyle === 'pips' ? 0.68 : this.getNumberLabelScale();
+    const geometry = new THREE.PlaneGeometry(face.size * labelScale, face.size * labelScale);
     const material = new THREE.MeshBasicMaterial({
       map: texture,
       transparent: true,
@@ -489,7 +755,7 @@ export class DiceWebglIcon extends LitElement {
     });
 
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.copy(face.center).add(face.normal.clone().multiplyScalar(0.05));
+    mesh.position.copy(face.center).add(face.normal.clone().multiplyScalar(0.12));
 
     const upHint = new THREE.Vector3(0, 1, 0);
     const projectedUp = upHint.sub(face.normal.clone().multiplyScalar(upHint.dot(face.normal)));
@@ -509,10 +775,19 @@ export class DiceWebglIcon extends LitElement {
     return mesh;
   }
 
-  private createLabelTexture(value: number): THREE.CanvasTexture {
+  /**
+   * Создаёт canvas-текстуру с точками-пипсами на прозрачном фоне.
+   * @param value Числовое значение грани
+   * @returns Текстура Three.js
+   */
+  private createLabelTexture(
+    value: number,
+    labelStyle: LabelStyle,
+    bodyColor: THREE.Color
+  ): THREE.CanvasTexture {
     const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
+    canvas.width = 384;
+    canvas.height = 384;
 
     const context = canvas.getContext('2d');
 
@@ -521,7 +796,12 @@ export class DiceWebglIcon extends LitElement {
     }
 
     context.clearRect(0, 0, canvas.width, canvas.height);
-    this.drawPips(context, value);
+
+    if (labelStyle === 'pips') {
+      this.drawPips(context, value, bodyColor);
+    } else {
+      this.drawFaceNumber(context, value, bodyColor);
+    }
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
@@ -530,87 +810,117 @@ export class DiceWebglIcon extends LitElement {
     return texture;
   }
 
-  private drawPips(context: CanvasRenderingContext2D, value: number) {
-    if (value > 6) {
-      this.drawDensePips(context, value);
-      return;
-    }
+  private drawPips(
+    context: CanvasRenderingContext2D,
+    value: number,
+    bodyColor: THREE.Color
+  ): void {
+    const size = 384;
+    const positions = this.getPipPositions(value);
+    const pipRadius = Math.max(12, Math.floor(52 / Math.sqrt(value)));
+    const isLightDie = this.isLightColor(bodyColor);
+    const pipColor = isLightDie ? '#20242c' : '#f7fbff';
+    const shadowColor = isLightDie ? 'rgba(0, 0, 0, 0.16)' : 'rgba(0, 0, 0, 0.22)';
 
-    const pipMap: Record<number, Array<[number, number]>> = {
-      1: [[0, 0]],
-      2: [
-        [-1, -1],
-        [1, 1],
-      ],
-      3: [
-        [-1, -1],
-        [0, 0],
-        [1, 1],
-      ],
-      4: [
-        [-1, -1],
-        [1, -1],
-        [-1, 1],
-        [1, 1],
-      ],
-      5: [
-        [-1, -1],
-        [1, -1],
-        [0, 0],
-        [-1, 1],
-        [1, 1],
-      ],
-      6: [
-        [-1, -1],
-        [1, -1],
-        [-1, 0],
-        [1, 0],
-        [-1, 1],
-        [1, 1],
-      ],
-    };
+    for (const [nx, ny] of positions) {
+      const x = nx * size;
+      const y = ny * size;
 
-    const positions = pipMap[value] ?? pipMap[1];
-    context.fillStyle = '#13283a';
-
-    positions.forEach(([gridX, gridY]) => {
       context.beginPath();
-      context.arc(128 + gridX * 42, 128 + gridY * 42, 16, 0, Math.PI * 2);
+      context.arc(x, y + 3, pipRadius + 4, 0, Math.PI * 2);
+      context.fillStyle = shadowColor;
       context.fill();
-    });
+
+      context.beginPath();
+      context.arc(x, y, pipRadius, 0, Math.PI * 2);
+      context.fillStyle = pipColor;
+      context.fill();
+    }
   }
 
-  private drawDensePips(context: CanvasRenderingContext2D, value: number) {
-    const columns = value <= 9 ? 3 : value <= 16 ? 4 : 5;
-    const rows = Math.ceil(value / columns);
-    const innerSize = 124;
-    const startY = 128 - innerSize / 2;
-    const stepX = columns > 1 ? innerSize / (columns - 1) : 0;
-    const stepY = rows > 1 ? innerSize / (rows - 1) : 0;
-    const radius = value <= 9 ? 10 : value <= 16 ? 8 : 6.5;
-    const positions: Array<{ x: number; y: number }> = [];
+  private drawFaceNumber(
+    context: CanvasRenderingContext2D,
+    value: number,
+    bodyColor: THREE.Color
+  ): void {
+    const inkColor = this.isLightColor(bodyColor) ? '#222831' : '#f8fbff';
+    const outlineColor = this.isLightColor(bodyColor) ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.25)';
 
-    for (let row = 0; row < rows; row += 1) {
-      const countInRow = Math.min(columns, value - positions.length);
-      const rowWidth = countInRow > 1 ? stepX * (countInRow - 1) : 0;
-      const rowStartX = 128 - rowWidth / 2;
-      const y = rows > 1 ? startY + row * stepY : 128;
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.lineJoin = 'round';
+    context.lineCap = 'round';
+    context.font = `bold ${value >= 10 ? 210 : 260}px "Trebuchet MS", "Arial Black", sans-serif`;
+    context.strokeStyle = outlineColor;
+    context.lineWidth = value >= 10 ? 18 : 20;
+    context.shadowColor = 'rgba(0, 0, 0, 0.18)';
+    context.shadowBlur = 20;
+    context.shadowOffsetY = 8;
+    context.strokeText(String(value), 192, 208);
+    context.shadowBlur = 0;
+    context.shadowOffsetY = 0;
+    context.fillStyle = inkColor;
+    context.fillText(String(value), 192, 208);
+  }
 
-      for (let column = 0; column < countInRow; column += 1) {
-        positions.push({
-          x: rowStartX + column * stepX,
-          y,
-        });
+  private getNumberLabelScale(): number {
+    switch (this.diceTypeId) {
+      case 'd4':
+        return 0.52;
+      case 'd10':
+        return 0.54;
+      case 'd12':
+        return 0.58;
+      case 'd20':
+        return 0.56;
+      default:
+        return 0.58;
+    }
+  }
+
+  private isLightColor(color: THREE.Color): boolean {
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    return hsl.l > 0.72;
+  }
+
+  private getPipPositions(value: number): [number, number][] {
+    const patterns: Record<number, [number, number][]> = {
+      1: [[0.5, 0.5]],
+      2: [[0.3, 0.3], [0.7, 0.7]],
+      3: [[0.3, 0.3], [0.5, 0.5], [0.7, 0.7]],
+      4: [[0.3, 0.3], [0.7, 0.3], [0.3, 0.7], [0.7, 0.7]],
+      5: [[0.3, 0.3], [0.7, 0.3], [0.5, 0.5], [0.3, 0.7], [0.7, 0.7]],
+      6: [[0.3, 0.22], [0.7, 0.22], [0.3, 0.5], [0.7, 0.5], [0.3, 0.78], [0.7, 0.78]],
+    };
+
+    if (patterns[value]) {
+      return patterns[value];
+    }
+
+    const cols = value <= 9 ? 3 : value <= 12 ? 4 : 5;
+    return this.makePipGrid(value, cols);
+  }
+
+  private makePipGrid(value: number, cols: number): [number, number][] {
+    const rows = Math.ceil(value / cols);
+    const positions: [number, number][] = [];
+    const margin = 0.18;
+    const spacingX = cols > 1 ? (1 - 2 * margin) / (cols - 1) : 0;
+    const spacingY = rows > 1 ? (1 - 2 * margin) / (rows - 1) : 0;
+
+    for (let row = 0; row < rows; row++) {
+      const rowCount = Math.min(cols, value - row * cols);
+      const y = rows === 1 ? 0.5 : margin + row * spacingY;
+      const rowWidth = (rowCount - 1) * spacingX;
+      const startX = rowCount === 1 ? 0.5 : 0.5 - rowWidth / 2;
+
+      for (let col = 0; col < rowCount; col++) {
+        positions.push([startX + col * spacingX, y]);
       }
     }
 
-    context.fillStyle = '#13283a';
-
-    positions.forEach(({ x, y }) => {
-      context.beginPath();
-      context.arc(x, y, radius, 0, Math.PI * 2);
-      context.fill();
-    });
+    return positions;
   }
 
   private randomizePreviewMotion() {
@@ -708,7 +1018,7 @@ export class DiceWebglIcon extends LitElement {
       Math.max(1, Math.round(Number(this.faceValue) || 1))
     );
     const targetFace = this.faceDescriptors[safeValue - 1];
-    const targetDirection = this.camera.position.clone().normalize();
+    const targetDirection = new THREE.Vector3(0, 1, 0);
     const targetQuaternion = new THREE.Quaternion().setFromUnitVectors(
       targetFace.normal.clone().normalize(),
       targetDirection

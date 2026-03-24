@@ -1,29 +1,18 @@
 import { css } from 'lit';
 
-// these styles can be imported from any component
-// for an example of how to use this, check /pages/about-about.ts
+/**
+ * Общие стили для всех страниц.
+ * main — контентная область между хедером (сверху) и таббаром (снизу).
+ */
 export const styles = css`
-  sl-card {
-    height: 100%;
-  }
-
-  sl-card::part(base) {
-    height: 100%;
-  }
-
-  sl-card::part(body) {
-    box-sizing: border-box;
-    height: 100%;
-  }
-
   main {
     box-sizing: border-box;
     width: 100%;
     height: 100dvh;
-    padding: 0;
+    /* Отступ сверху = высота хедера, снизу = высота таббара */
     padding-top: var(--app-header-height);
+    padding-bottom: var(--app-tab-bar-height);
     padding-right: var(--app-safe-area-right);
-    padding-bottom: var(--app-safe-area-bottom);
     padding-left: var(--app-safe-area-left);
   }
 `;

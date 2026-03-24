@@ -1,17 +1,32 @@
-
 /*
-  This file is used for all of your global styles and CSS variables.
-  Check here https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties for more info on using CSS variables.
+  Глобальные CSS-переменные и базовые стили приложения.
 */
 :root {
-  --font-family: sans-serif;
+  --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  /* Отступы безопасной зоны устройства */
   --app-safe-area-top: env(safe-area-inset-top, 0px);
   --app-safe-area-right: env(safe-area-inset-right, 0px);
   --app-safe-area-bottom: env(safe-area-inset-bottom, 0px);
   --app-safe-area-left: env(safe-area-inset-left, 0px);
-  --app-header-base-height: 34px;
+
+  /* Хедер */
+  --app-header-base-height: 44px;
   --app-header-height: calc(var(--app-header-base-height) + var(--app-safe-area-top));
-  --app-content-height: calc(100dvh - var(--app-header-height) - var(--app-safe-area-bottom));
+
+  /* Нижний таббар */
+  --app-tab-bar-base-height: 56px;
+  --app-tab-bar-height: calc(var(--app-tab-bar-base-height) + var(--app-safe-area-bottom));
+
+  /* Высота контентной области (между хедером и таббаром) */
+  --app-content-height: calc(100dvh - var(--app-header-height) - var(--app-tab-bar-height));
+
+  /* Фон зелёного стола (для страницы броска) */
+  --felt-bg: #2d6a4f;
+  --felt-bg-dark: #1b4332;
+
+  /* Основной акцентный цвет (кнопки, активные элементы) */
+  --app-color-primary: #3a7bd5;
 }
 
 html, body {
@@ -20,28 +35,12 @@ html, body {
   margin: 0;
   width: 100%;
   height: 100dvh;
+  background-color: #f2f4f8;
+  color: #1a2a3a;
 }
 
 app-index {
   display: block;
   width: 100%;
   height: 100dvh;
-}
-
-@media (prefers-color-scheme: dark) {
-
-  html,
-  body {
-    background-color: #181818;
-    color: white;
-  }
-}
-
-@media (prefers-color-scheme: light) {
-
-  html,
-  body {
-    background-color: #f5f5f5;
-    color: black;
-  }
 }

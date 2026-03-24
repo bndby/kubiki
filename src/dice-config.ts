@@ -15,6 +15,8 @@ export interface DiceTypeConfig {
   outlinePoints: string;
   innerLines: DiceVisualLine[];
   labelY: number;
+  /** Основной цвет кубика (hex), используется в WebGL и на всех страницах */
+  color: string;
 }
 
 export const DEFAULT_DICE_TYPE: DiceTypeId = 'd6';
@@ -28,22 +30,25 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
     outlinePoints: '50,10 86,82 14,82',
     innerLines: [
       { x1: 50, y1: 10, x2: 50, y2: 82 },
-      { x1: 50, y1: 10, x2: 14, y2: 82 },
-      { x1: 50, y1: 10, x2: 86, y2: 82 },
+      { x1: 14, y1: 82, x2: 68, y2: 46 },
+      { x1: 86, y1: 82, x2: 32, y2: 46 },
     ],
-    labelY: 60,
+    labelY: 62,
+    color: '#e05c8a',
   },
   {
     id: 'd6',
     sides: 6,
     solidName: 'Куб',
     teaser: '6 граней',
-    outlinePoints: '20,20 80,20 80,80 20,80',
+    outlinePoints: '50,12 84,31 84,69 50,88 16,69 16,31',
     innerLines: [
-      { x1: 20, y1: 50, x2: 80, y2: 50 },
-      { x1: 50, y1: 20, x2: 50, y2: 80 },
+      { x1: 50, y1: 12, x2: 50, y2: 50 },
+      { x1: 84, y1: 31, x2: 50, y2: 50 },
+      { x1: 16, y1: 31, x2: 50, y2: 50 },
     ],
-    labelY: 58,
+    labelY: 56,
+    color: '#d94040',
   },
   {
     id: 'd8',
@@ -54,12 +59,9 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
     innerLines: [
       { x1: 50, y1: 8, x2: 50, y2: 92 },
       { x1: 12, y1: 50, x2: 88, y2: 50 },
-      { x1: 50, y1: 8, x2: 12, y2: 50 },
-      { x1: 50, y1: 8, x2: 88, y2: 50 },
-      { x1: 12, y1: 50, x2: 50, y2: 92 },
-      { x1: 88, y1: 50, x2: 50, y2: 92 },
     ],
     labelY: 58,
+    color: '#2bbfb0',
   },
   {
     id: 'd10',
@@ -73,6 +75,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
       { x1: 76, y1: 14, x2: 24, y2: 86 },
     ],
     labelY: 58,
+    color: '#e07a20',
   },
   {
     id: 'd12',
@@ -88,6 +91,7 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
       { x1: 72, y1: 10, x2: 28, y2: 90 },
     ],
     labelY: 58,
+    color: '#8855cc',
   },
   {
     id: 'd20',
@@ -100,12 +104,9 @@ export const DICE_TYPES: readonly DiceTypeConfig[] = [
       { x1: 16, y1: 28, x2: 84, y2: 72 },
       { x1: 84, y1: 28, x2: 16, y2: 72 },
       { x1: 8, y1: 50, x2: 92, y2: 50 },
-      { x1: 50, y1: 6, x2: 16, y2: 72 },
-      { x1: 50, y1: 6, x2: 84, y2: 72 },
-      { x1: 16, y1: 28, x2: 50, y2: 94 },
-      { x1: 84, y1: 28, x2: 50, y2: 94 },
     ],
     labelY: 58,
+    color: '#6a7080',
   },
 ] as const;
 

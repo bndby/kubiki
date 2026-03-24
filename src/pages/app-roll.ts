@@ -1,11 +1,12 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, state } from 'lit/decorators.js';
-import { resolveRouterPath } from '../router';
-import { clampDiceCount, DEFAULT_DICE_TYPE, getDiceType } from '../dice-config';
+import { clampDiceCount, DEFAULT_DICE_TYPE, getDiceType, type DiceTypeConfig } from '../dice-config';
+import { loadSettings, addToHistory } from '../storage';
+import { t, I18nController } from '../i18n';
 
-import '@shoelace-style/shoelace/dist/components/card/card.js';
-import '@shoelace-style/shoelace/dist/components/button/button.js';
 import '../components/dice-webgl-icon';
+import '../components/header';
+import '../components/app-tabs';
 
 import { styles } from '../styles/shared-styles';
 
@@ -13,10 +14,12 @@ type RollState = 'idle' | 'rolling' | 'result';
 
 @customElement('app-roll')
 export class AppRoll extends LitElement {
-  @state() private diceCount = 1;
-  @state() private diceType = getDiceType(DEFAULT_DICE_TYPE);
+  constructor() { super(); new I18nController(this); }
+
+  @state() private diceType: DiceTypeConfig = getDiceType(DEFAULT_DICE_TYPE);
+  @state() private diceCount = 2;
   @state() private rollState: RollState = 'idle';
-  @state() private currentValues: number[] = [1];
+  @state() private currentValues: number[] = [];
 
   private readonly rollDurationMs = 3000;
   private rollIntervalId?: number;
@@ -25,77 +28,78 @@ export class AppRoll extends LitElement {
   static styles = [
     styles,
     css`
-      #screen {
-        display: flex;
-        width: 100%;
-        height: var(--app-content-height);
-      }
-
-      #rollCard {
-        box-sizing: border-box;
-        width: 100%;
-        height: var(--app-content-height);
-        padding: 20px;
-        border-radius: 0;
-      }
-
-      #rollCard::part(body) {
+      main {
+        background: linear-gradient(160deg, var(--felt-bg) 0%, var(--felt-bg-dark) 100%);
         display: flex;
         flex-direction: column;
-        box-sizing: border-box;
-        height: 100%;
-        padding: 16px;
+        overflow: hidden;
       }
 
-      h2 {
-        margin: 0;
+      #sumBanner {
+        margin: 12px 16px 0;
+        padding: 14px 20px;
+        border-radius: 16px;
+        background: rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(6px);
+        text-align: center;
+        color: #ffffff;
+        font-size: 28px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        flex-shrink: 0;
       }
 
-      #summaryRow {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-bottom: 10px;
+      #sumBanner.rolling {
+        opacity: 0.7;
       }
 
-      .summaryChip {
-        padding: 7px 12px;
-        border-radius: 999px;
-        background: color-mix(in oklab, var(--app-color-primary) 10%, white);
-        color: #223243;
-        font-size: 14px;
-        box-shadow: inset 0 0 0 1px rgba(138, 160, 184, 0.24);
-      }
-
-      #diceRow {
+      #diceArea {
         flex: 1;
-        display: flex;
+        display: grid;
         justify-content: center;
-        align-items: flex-start;
-        flex-wrap: wrap;
-        column-gap: 18px;
-        row-gap: 10px;
-        margin: 0;
-        padding: 10px 8px;
+        align-content: center;
+        gap: 16px;
+        padding: 20px 16px;
+        overflow: hidden;
+      }
+
+      /* Grid columns by count */
+      #diceArea.cols-1 { grid-template-columns: auto; }
+      #diceArea.cols-2 { grid-template-columns: auto auto; }
+      #diceArea.cols-3 { grid-template-columns: auto auto auto; }
+
+      /* Die preview sizes by count */
+      #diceArea.count-1 .diePreview { width: 150px; height: 150px; }
+      #diceArea.count-2 .diePreview { width: 130px; height: 130px; }
+      #diceArea.count-3 .diePreview { width: 96px;  height: 96px; }
+      #diceArea.count-4 .diePreview { width: 120px; height: 120px; }
+      #diceArea.count-5 .diePreview { width: 88px;  height: 88px; }
+      #diceArea.count-6 .diePreview { width: 88px;  height: 88px; }
+
+      /* Center the 2-item last row for 5 dice (3 cols, last row = 2 items):
+         offset = (3 * dieW + 2 * gap − 2 * dieW − 1 * gap) / 2 = (dieW + gap) / 2
+         = (88 + 16) / 2 = 52px */
+      #diceArea.count-5 .dieCard:nth-child(4) {
+        margin-left: 52px;
       }
 
       .dieCard {
-        width: min(112px, 100%);
         display: flex;
-        align-items: center;
         flex-direction: column;
+        align-items: center;
         gap: 8px;
-        transition: transform 220ms ease;
       }
 
       .dieCard.rolling {
-        animation: bounce 420ms ease-in-out infinite alternate;
+        animation: dieBounce 400ms ease-in-out infinite alternate;
       }
 
       .diePreview {
-        width: 100%;
-        max-width: 62px;
-        aspect-ratio: 1 / 1;
+        /* default (fallback) size */
+        width: 88px;
+        height: 88px;
+        border-radius: 18%;
+        overflow: hidden;
       }
 
       dice-webgl-icon {
@@ -103,120 +107,104 @@ export class AppRoll extends LitElement {
         height: 100%;
       }
 
-      .dieValueChip {
-        min-width: 58px;
-        padding: 5px 10px;
+      .dieValue {
+        min-width: 48px;
+        padding: 4px 10px;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.96);
-        box-shadow:
-          0 6px 14px rgba(15, 23, 42, 0.1),
-          inset 0 0 0 1px rgba(138, 160, 184, 0.18);
-        font-size: 12px;
-        font-weight: 800;
+        background: rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+        font-size: 13px;
+        font-weight: 700;
         text-align: center;
-        color: #243445;
       }
 
-      #actionRow {
-        padding-top: 12px;
-        display: grid;
-        gap: 10px;
+      #rollBtn {
+        display: block;
+        flex-shrink: 0;
+        margin: 0 16px 16px;
+        padding: 16px;
+        border: none;
+        border-radius: 16px;
+        background: var(--app-color-primary);
+        color: #ffffff;
+        font-size: 17px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        box-shadow: 0 6px 20px rgba(58, 123, 213, 0.38);
+        transition: transform 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
+        text-align: center;
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
       }
 
-      sl-button {
-        width: 100%;
+      #rollBtn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 8px 24px rgba(58, 123, 213, 0.46);
       }
 
-      @keyframes bounce {
-        0% {
-          transform: translateY(0);
-        }
-        100% {
-          transform: translateY(-5px);
-        }
+      #rollBtn:active {
+        transform: scale(0.98);
       }
 
-      @media (min-width: 760px) {
-        .dieCard {
-          width: min(124px, 100%);
-        }
+      #rollBtn:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+        transform: none;
+      }
 
-        .diePreview {
-          max-width: 76px;
-        }
+      @keyframes dieBounce {
+        0%   { transform: translateY(0) rotate(-2deg); }
+        100% { transform: translateY(-8px) rotate(2deg); }
+      }
+
+      @media (max-width: 380px) {
+        #diceArea .diePreview { width: 72px; height: 72px; }
+        /* Re-center 2-item last row: (72 + 16) / 2 = 44px */
+        #diceArea.count-5 .dieCard:nth-child(4) { margin-left: 44px; }
       }
 
       @media (prefers-reduced-motion: reduce) {
-        .dieCard.rolling {
-          animation: none;
-        }
+        .dieCard.rolling { animation: none; }
       }
     `,
   ];
 
-  firstUpdated() {
-    this.readSelectionFromQuery();
-    this.currentValues = this.createRandomRoll(this.diceCount);
+  connectedCallback() {
+    super.connectedCallback();
+    const settings = loadSettings();
+    this.diceType = getDiceType(settings.type);
+    this.diceCount = clampDiceCount(settings.count);
+    this.currentValues = this.makeRoll(clampDiceCount(settings.count));
+    this.rollState = 'result';
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this.clearRollTimers();
+    this.clearTimers();
   }
 
-  private readSelectionFromQuery() {
-    const params = new URLSearchParams(window.location.search);
-    this.diceType = getDiceType(params.get('type'));
-    this.diceCount = clampDiceCount(Number(params.get('count')));
+  private get gridCols(): number {
+    if (this.diceCount <= 3) return this.diceCount;
+    if (this.diceCount === 4) return 2;
+    return 3; // 5, 6
   }
 
-  private getSelectionPath(): string {
-    const selectionUrl = new URL(resolveRouterPath(), window.location.origin);
-    selectionUrl.searchParams.set('count', String(this.diceCount));
-    selectionUrl.searchParams.set('type', this.diceType.id);
-    return `${selectionUrl.pathname}${selectionUrl.search}`;
+  private makeRoll(count: number): number[] {
+    return Array.from({ length: count }, () =>
+      Math.floor(Math.random() * this.diceType.sides) + 1
+    );
   }
 
-  private createRandomValue(): number {
-    return Math.floor(Math.random() * this.diceType.sides) + 1;
+  private getTotal(): number {
+    return this.currentValues.reduce((sum, v) => sum + v, 0);
   }
 
-  private createRandomRoll(count: number): number[] {
-    return Array.from({ length: count }, () => this.createRandomValue());
-  }
-
-  private getTotalValue(): number {
-    return this.currentValues.reduce((sum, value) => sum + value, 0);
-  }
-
-  private getMotionMode(): 'rolling' | 'still' {
-    return this.rollState === 'rolling' ? 'rolling' : 'still';
-  }
-
-  private renderDie(value: number, index: number) {
-    const isRolling = this.rollState === 'rolling';
-
-    return html`
-      <div class="dieCard ${isRolling ? 'rolling' : ''}" role="img" aria-label="${this.diceType.id.toUpperCase()}: ${value}">
-        <div class="diePreview">
-          <dice-webgl-icon
-            dice-type="${this.diceType.id}"
-            motion-mode="${this.getMotionMode()}"
-            roll-duration-ms="${this.rollDurationMs}"
-            face-value="${value}"
-          ></dice-webgl-icon>
-        </div>
-        <div class="dieValueChip">#${index + 1}: ${value}</div>
-      </div>
-    `;
-  }
-
-  private clearRollTimers() {
+  private clearTimers() {
     if (this.rollIntervalId !== undefined) {
       window.clearInterval(this.rollIntervalId);
       this.rollIntervalId = undefined;
     }
-
     if (this.rollTimeoutId !== undefined) {
       window.clearTimeout(this.rollTimeoutId);
       this.rollTimeoutId = undefined;
@@ -224,60 +212,83 @@ export class AppRoll extends LitElement {
   }
 
   private rollDice() {
-    if (this.rollState === 'rolling') {
-      return;
-    }
+    if (this.rollState === 'rolling') return;
 
-    this.clearRollTimers();
+    this.clearTimers();
     this.rollState = 'rolling';
-    this.currentValues = this.createRandomRoll(this.diceCount);
+    this.currentValues = this.makeRoll(this.diceCount);
 
     this.rollIntervalId = window.setInterval(() => {
-      this.currentValues = this.createRandomRoll(this.diceCount);
+      this.currentValues = this.makeRoll(this.diceCount);
     }, 120);
 
     this.rollTimeoutId = window.setTimeout(() => {
-      this.clearRollTimers();
-      this.currentValues = this.createRandomRoll(this.diceCount);
+      this.clearTimers();
+      const finalValues = this.makeRoll(this.diceCount);
+      this.currentValues = finalValues;
       this.rollState = 'result';
+
+      addToHistory({
+        id: crypto.randomUUID(),
+        timestamp: Date.now(),
+        diceType: this.diceType.id,
+        diceCount: this.diceCount,
+        values: finalValues,
+        total: finalValues.reduce((s, v) => s + v, 0),
+      });
     }, this.rollDurationMs);
   }
 
-  render() {
+  private renderDie(value: number, index: number) {
+    const isRolling = this.rollState === 'rolling';
+    const motionMode = isRolling ? 'rolling' : 'still';
+
     return html`
-      <app-header></app-header>
+      <div
+        class="dieCard ${isRolling ? 'rolling' : ''}"
+        role="img"
+        aria-label="${this.diceType.id.toUpperCase()} #${index + 1}: ${value}"
+      >
+        <div class="diePreview">
+          <dice-webgl-icon
+            dice-type="${this.diceType.id}"
+            dice-color="${this.diceType.color}"
+            motion-mode="${motionMode}"
+            roll-duration-ms="${this.rollDurationMs}"
+            face-value="${value}"
+          ></dice-webgl-icon>
+        </div>
+        <div class="dieValue">${value}</div>
+      </div>
+    `;
+  }
+
+  render() {
+    const isRolling = this.rollState === 'rolling';
+
+    return html`
+      <app-header pageTitle="${t('headerRoll')}"></app-header>
 
       <main>
-        <div id="screen">
-          <sl-card id="rollCard">
-            <h2>${this.diceType.id.toUpperCase()} · ${this.diceType.solidName}</h2>
-
-            <div id="summaryRow">
-              <span class="summaryChip">Кубиков: ${this.diceCount}</span>
-              <span class="summaryChip">Граней: ${this.diceType.sides}</span>
-              <span class="summaryChip">Сумма: ${this.getTotalValue()}</span>
-            </div>
-
-            <div id="diceRow">
-              ${this.currentValues.map((value, index) => this.renderDie(value, index))}
-            </div>
-
-            <div id="actionRow">
-              <sl-button
-                variant="primary"
-                size="large"
-                @click=${this.rollDice}
-                ?disabled=${this.rollState === 'rolling'}
-              >
-                Бросаю
-              </sl-button>
-              <sl-button href="${this.getSelectionPath()}" variant="default" size="large">
-                К выбору кубиков
-              </sl-button>
-            </div>
-          </sl-card>
+        <div id="sumBanner" class="${isRolling ? 'rolling' : ''}">
+          ${t('sumLabel')} ${this.getTotal()}
         </div>
+
+        <div id="diceArea" class="cols-${this.gridCols} count-${this.diceCount}">
+          ${this.currentValues.map((value, index) => this.renderDie(value, index))}
+        </div>
+
+        <button
+          id="rollBtn"
+          @click=${this.rollDice}
+          ?disabled=${isRolling}
+          aria-label="${t('rollBtnAria')}"
+        >
+          ${t('rollBtn')}
+        </button>
       </main>
+
+      <app-tabs activeTab="roll"></app-tabs>
     `;
   }
 }
