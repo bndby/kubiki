@@ -1,0 +1,2 @@
+# SPA fallback: существующие файлы из dist отдаются как есть, остальное — index.html
+/*    /index.html   200

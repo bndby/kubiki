@@ -20,7 +20,21 @@
 
 - `npm run dev` — локальная разработка
 - `npm run build` — production-сборка в `dist/`
-- `npm run deploy` — деплой через Azure Static Web Apps CLI
+- `npm run deploy` — только для **ручного** выкладывания: `npm run build` и `wrangler pages deploy dist` (нужны токен и `CLOUDFLARE_ACCOUNT_ID`, см. [документацию Wrangler](https://developers.cloudflare.com/workers/wrangler/commands/#deploy)). Поле `name` в `wrangler.toml` должно совпадать с именем проекта **Pages** в Dashboard.
+
+### Cloudflare Pages при деплое из Git
+
+В настройках проекта **Workers & Pages → ваш проект → Settings → Builds**:
+
+| Поле | Значение |
+|------|----------|
+| Build command | `npm run build` |
+| Build output directory | `dist` |
+| **Deploy command** | **оставить пустым** |
+
+После сборки Cloudflare сам публикует содержимое `dist`. Не указывайте `npx wrangler deploy` — это команда для **Cloudflare Workers**; она запускает авто-настройку Vite с `@cloudflare/vite-plugin` и на типичном Pages-билде приводит к ошибкам вроде «ESM only but tried to load by require».
+
+Если в репозитории появились правки от неудачного `wrangler deploy` (импорт `@cloudflare/vite-plugin` в `vite.config.ts`, `wrangler.jsonc` для Worker), откатите их: для этого приложения достаточно обычного Vite-сборщика и при необходимости `public/_redirects` (SPA fallback).
 
 ## PWA-конфигурация
 

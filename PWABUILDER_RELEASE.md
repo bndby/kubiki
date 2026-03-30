@@ -8,8 +8,7 @@
 
 ## 2) Сборка и деплой
 
-- [ ] Выполнить `npm run build`
-- [ ] Опубликовать `dist/` на HTTPS URL
+- [ ] Выполнить `npm run deploy` (Cloudflare Pages) или `npm run build` и вручную выложить `dist/` на HTTPS
 - [ ] Проверить production URL в браузере (без ошибок в консоли)
 
 ## 3) Упаковка в PWABuilder

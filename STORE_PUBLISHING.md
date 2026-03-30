@@ -21,8 +21,8 @@
 ## Android (Google Play) через PWABuilder
 
 1. Собрать и задеплоить веб-версию:
-   - `npm run build`
-   - загрузить `dist/` на хостинг с HTTPS.
+   - `npm run deploy` — сборка и выгрузка на **Cloudflare Pages** (нужны `CLOUDFLARE_API_TOKEN` и `CLOUDFLARE_ACCOUNT_ID`, либо `npx wrangler login`);
+   - либо `npm run build` и вручную загрузить `dist/` на любой HTTPS-хостинг.
 2. Открыть [PWABuilder](https://www.pwabuilder.com) и ввести URL приложения.
 3. В разделе упаковки выбрать Android (TWA) и скачать `.aab`.
 4. Загрузить `.aab` в Google Play Console.

@@ -1,0 +1,6 @@
+# Cloudflare Pages (Direct Upload). Имя проекта должно совпадать с проектом в Dashboard.
+# Учётные данные: переменные окружения CLOUDFLARE_API_TOKEN и CLOUDFLARE_ACCOUNT_ID
+# (или один раз: npx wrangler login).
+name = "pwa-kubiki"
+compatibility_date = "2025-03-01"
+pages_build_output_dir = "dist"
