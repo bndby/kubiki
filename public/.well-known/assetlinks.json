@@ -1,1 +1,10 @@
-[]
+[
+    {
+        "relation": ["delegate_permission/common.handle_all_urls"],
+        "target" : {
+            "namespace": "android_app",
+            "package_name": "by.bnd.kubiki",
+            "sha256_cert_fingerprints": ["6B:C7:C0:4B:E6:BA:34:E1:8A:5E:E3:71:8B:55:A7:6D:47:7F:BF:6E:16:3A:C2:89:CD:40:E8:EA:08:E3:77:6C"]
+        }
+    }
+]
